@@ -45,12 +45,21 @@ Follow this sequence:
 1. Resolve the dispatcher ID, database path, expected task route, requested mode, and observed runtime identity without inventing missing values.
 2. Run `status`, `integrity-check`, and `route-check` as applicable. Verify that the heartbeat schedule covers the registered collection schedule within maximum lateness. Fail closed before due evaluation or claim on corruption, migration uncertainty, route mismatch, insufficient required assurance, definition-hash mismatch, or schedule-coverage failure.
 3. Run `due` for read-only evaluation. Use a time override only for an explicitly requested dry run or deterministic test.
-4. Prefer `run` for the orchestrated route-check, due, claim, execution, persistence, and receipt flow. Use lower-level claim/completion commands only for tests or documented recovery.
+4. Prefer `run` for orchestrated route-check, due evaluation, claim, and script execution. Use `claim` directly only for tests or documented recovery. When `run` returns `action_required`, the heartbeat must use `complete` or `fail` as the required continuation described below.
 5. Execute only the claimed workflow revision and pass its stable occurrence idempotency key to external-effect procedures when supported.
 6. Persist success, failure, or `effect_unknown` before reporting. Never automatically retry an ambiguous external effect.
 7. Post only the exact persisted material receipt through the supported host task tool, then call `receipt-ack`. A post failure uses `receipt-retry`; it never re-executes the workflow.
 
 No-due heartbeats should remain silent when the host permits it.
+
+For every `action_required` result from an agent, skill, or documented procedure, the heartbeat owns the rest of the run lifecycle. It must use only that result's `host_action` and the registered definition/authority references, perform no unrelated work, and then:
+
+1. Call `complete <run-id> --actor <heartbeat-owner> --summary <bounded-summary>` with durable `--evidence` references after success, or `fail <run-id> --actor <heartbeat-owner> --error-class <class> --summary <bounded-summary>` after failure. Use `--effect-unknown` when an external effect may have occurred but cannot be reconciled. Do not leave the run in `running`, even when the procedure fails.
+2. Take the `receipt.receipt_id` returned by that terminal command and call `receipt-retry <receipt-id> --actor <posting-actor>` once. This fences delivery and returns `posting_payload` containing the exact persisted `thread_id` and `message`.
+3. Post exactly `posting_payload.message` to exactly `posting_payload.thread_id` through the supported task tool. Do not summarize, wrap, regenerate, or combine the message.
+4. Re-read or otherwise reconcile the posted task message. Only after confirming the external message is the exact persisted payload, call `receipt-ack <receipt-id> --external-message-id <message-id> --actor <posting-actor>`.
+
+If posting fails before any external effect, retry the persisted receipt; never rerun the procedure. If posting may have succeeded, reconcile the destination before retrying and never use `--confirm-not-posted` without independent proof. A heartbeat is not complete while any claimed agent/skill/documented run remains `running` or its material receipt remains unreconciled.
 
 ## Mutate registrations safely
 

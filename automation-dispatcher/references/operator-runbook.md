@@ -190,7 +190,7 @@ Prefer machine-readable JSON for the host adapter. Confirm each material result 
 
 Stop before claim if migration, integrity, collection schedule, heartbeat coverage, definition verification, route, or required identity assurance fails. Record optional absent identities as unknown.
 
-Use `--at`, `--start`, and `--max-occurrences` only for approved deterministic due/run windows. Use `claim`, `complete`, and `fail` directly only in tests or documented recovery; ordinary heartbeats use `run`.
+Use `--at`, `--start`, and `--max-occurrences` only for approved deterministic due/run windows. Use `claim` directly only in tests or documented recovery; ordinary heartbeats start with `run`. When `run` returns `action_required` for an agent, skill, or documented procedure, the heartbeat must perform only the returned registered host action, then use `complete` or `fail` to persist its terminal outcome and receipt before posting that receipt.
 
 Relative script references resolve from the registered definition file's directory. Pass each permissible containing directory as `--approved-root`; the resolved script must be a regular file inside one of those roots. Do not broaden approved roots merely to make a definition run.
 
