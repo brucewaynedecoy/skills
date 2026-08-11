@@ -185,7 +185,7 @@ automation-dispatcher \
   --approved-root "/absolute/path/to/workflow-procedures"
 ```
 
-If nothing is due, the command exits cleanly. Otherwise it pairs the collection occurrence with every enabled member, claims each workflow occurrence once, runs only the pinned registered procedure, and persists terminal or ambiguous results plus receipts.
+If nothing is due, the command exits cleanly. Otherwise it pairs the collection occurrence with every enabled member and claims each workflow occurrence once. It executes script procedures and persists their terminal or ambiguous results plus receipts. For an agent, skill, or documented procedure, it returns `action_required`; the heartbeat must perform the registered host action and finish the terminal-result and receipt loop below.
 
 ## Inspect and audit
 
@@ -208,6 +208,64 @@ Run `automation-dispatcher --help` or `automation-dispatcher <command> --help` f
 ## Receipts and recovery
 
 Receipts are persisted before posting. `receipt-retry <receipt-id> --actor <actor>` fences one delivery attempt and returns the exact stored payload. Post that payload through the supported task tool, then record the external message ID with `receipt-ack`. If posting may have succeeded but acknowledgment is missing, reconcile the destination first; do not resend an ambiguous receipt or rerun the workflow.
+
+### Complete heartbeat template for agent, skill, and documented procedures
+
+`run` executes script procedures itself. For an agent, skill, or documented procedure it claims the occurrence, marks the run `running`, and returns a result like this:
+
+```json
+{
+  "status": "action_required",
+  "run_id": "<run-id>",
+  "host_action": {
+    "kind": "skill",
+    "reference": "<registered-procedure-reference>",
+    "run_id": "<run-id>",
+    "occurrence_key": "<stable-idempotency-key>",
+    "authority_refs": ["<registered-authority-reference>"]
+  }
+}
+```
+
+For each such result, the scheduled agent must complete the entire loop in the same heartbeat:
+
+1. Perform only the procedure named by `host_action`, using only its registered authority references. Pass `occurrence_key` to any external-effect operation that supports idempotency.
+2. Persist exactly one terminal outcome. On success:
+
+   ```bash
+   automation-dispatcher --database "<absolute-database-path>" --json complete "<run-id>" \
+     --actor "<heartbeat-owner>" \
+     --summary "<bounded-result-summary>" \
+     --evidence "<durable-evidence-reference>"
+   ```
+
+   On failure:
+
+   ```bash
+   automation-dispatcher --database "<absolute-database-path>" --json fail "<run-id>" \
+     --actor "<heartbeat-owner>" \
+     --error-class "<stable-error-class>" \
+     --summary "<bounded-failure-summary>"
+   ```
+
+   Add `--effect-unknown` when an external effect may have occurred and reconciliation cannot establish its outcome. Never allow a handled procedure failure to leave the run in `running`.
+3. Read `receipt.receipt_id` from the `complete` or `fail` result, then fence delivery and obtain the persisted payload:
+
+   ```bash
+   automation-dispatcher --database "<absolute-database-path>" --json receipt-retry "<receipt-id>" \
+     --actor "<posting-actor>"
+   ```
+
+4. Through the supported task tool, post exactly `posting_payload.message` to exactly `posting_payload.thread_id`. Do not edit, summarize, prefix, suffix, or recreate the message.
+5. Re-read or otherwise reconcile the external post. Verify that its destination and message exactly match the persisted `posting_payload`, retain the returned external message ID, and only then acknowledge it:
+
+   ```bash
+   automation-dispatcher --database "<absolute-database-path>" --json receipt-ack "<receipt-id>" \
+     --external-message-id "<external-message-id>" \
+     --actor "<posting-actor>"
+   ```
+
+6. Before ending the heartbeat, confirm every `action_required` run reached a terminal state and every material receipt posted in this heartbeat is reconciled and acknowledged. If the post definitely failed, retry the same persisted receipt without rerunning the procedure. If it may have posted, reconcile first; never resend an ambiguous receipt.
 
 Interrupted runs keep their original occurrence and attempt lineage. Recover only after determining whether an external effect completed, did not complete, or remains ambiguous. Persist `effect_unknown` and request an owner decision when reconciliation cannot establish the outcome.
 

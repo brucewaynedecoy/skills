@@ -207,6 +207,132 @@ def test_duplicate_full_heartbeat_does_not_duplicate_run_receipt_or_effect(
     connection.close()
 
 
+def test_skill_heartbeat_completes_posts_exact_receipt_and_acknowledges(
+    tmp_path: Path, capsys
+) -> None:
+    definition_path, definition = _definition_copy(tmp_path, name="skill-workflow.json")
+    definition["procedure"] = {
+        "kind": "skill",
+        "reference": "$fixture-skill",
+        "external_effect": {"mode": "none"},
+    }
+    _write_definition(definition_path, definition)
+
+    database = tmp_path / "skill-heartbeat.sqlite3"
+    common = ("--database", str(database), "--json")
+    code, initialized = invoke(capsys, *common, *init_arguments(tmp_path))
+    assert code == 0, initialized
+    code, registered = invoke(
+        capsys,
+        *common,
+        "register",
+        "--definition", str(definition_path),
+        "--actor", "test",
+        "--reason", "skill heartbeat acceptance",
+    )
+    assert code == 0, registered
+
+    observed = json.dumps(
+        {
+            "task_id": {
+                "value": "task-daily",
+                "source": "runtime",
+                "assurance": "verified_config",
+            },
+            "working_directory": {
+                "value": str(tmp_path),
+                "source": "runtime",
+                "assurance": "verified_config",
+            },
+        }
+    )
+    at, start, _ = next_due_window()
+    code, dispatched = invoke(
+        capsys,
+        *common,
+        "run",
+        "--dispatcher-id", "ops-collection",
+        "--owner", "heartbeat",
+        "--observed", observed,
+        "--at", at,
+        "--start", start,
+    )
+    assert code == 0, dispatched
+    action = dispatched["runs"][0]
+    assert action["status"] == "action_required"
+    assert action["host_action"] == {
+        "kind": "skill",
+        "reference": "$fixture-skill",
+        "run_id": action["run_id"],
+        "occurrence_key": action["host_action"]["occurrence_key"],
+        "authority_refs": [definition_path.name],
+    }
+
+    code, completed = invoke(
+        capsys,
+        *common,
+        "complete", action["run_id"],
+        "--actor", "heartbeat",
+        "--summary", "registered skill procedure completed",
+        "--evidence", "evidence://skill-result",
+    )
+    assert code == 0, completed
+    assert completed["status"] == "succeeded"
+    receipt_id = completed["receipt"]["receipt_id"]
+
+    code, prepared = invoke(
+        capsys,
+        *common,
+        "receipt-retry", receipt_id,
+        "--actor", "heartbeat",
+    )
+    assert code == 0, prepared
+    assert prepared["status"] == "posting"
+    assert prepared["posting_payload"]["thread_id"] == "task-daily"
+
+    posted_messages: list[dict[str, str]] = []
+    posted_messages.append(
+        {
+            "id": "task-message-1",
+            "thread_id": prepared["posting_payload"]["thread_id"],
+            "message": prepared["posting_payload"]["message"],
+        }
+    )
+    reconciled = posted_messages[-1]
+    assert reconciled["thread_id"] == prepared["posting_payload"]["thread_id"]
+    assert reconciled["message"] == prepared["posting_payload"]["message"]
+
+    code, acknowledged = invoke(
+        capsys,
+        *common,
+        "receipt-ack", receipt_id,
+        "--external-message-id", reconciled["id"],
+        "--actor", "heartbeat",
+    )
+    assert code == 0, acknowledged
+    assert acknowledged["status"] == "posted"
+
+    connection = connect(database)
+    run = connection.execute(
+        "SELECT state, output_summary FROM runs WHERE run_id = ?", (action["run_id"],)
+    ).fetchone()
+    receipt = connection.execute(
+        "SELECT status, rendered_content, external_message_id FROM receipts WHERE receipt_id = ?",
+        (receipt_id,),
+    ).fetchone()
+    assert dict(run) == {
+        "state": "succeeded",
+        "output_summary": "registered skill procedure completed",
+    }
+    assert receipt["status"] == "posted"
+    assert receipt["rendered_content"] == reconciled["message"]
+    assert receipt["external_message_id"] == reconciled["id"]
+    assert connection.execute(
+        "SELECT COUNT(*) FROM runs WHERE state = 'running'"
+    ).fetchone()[0] == 0
+    connection.close()
+
+
 def test_crash_before_effect_recovers_same_run_without_ambiguity(tmp_path: Path) -> None:
     database = configured_database(tmp_path)
     connection = connect(database)
