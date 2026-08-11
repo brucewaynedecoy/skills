@@ -1,0 +1,46 @@
+{
+  "schema_version": 2,
+  "workflow_id": "fixture-daily-review",
+  "name": "Fixture daily review",
+  "description": "A source-controlled workflow used by deterministic unit tests.",
+  "dispatcher_id": "ops-collection",
+  "enabled": true,
+  "retry": {
+    "max_attempts": 2,
+    "backoff_seconds": 300
+  },
+  "claim_lease_seconds": 1800,
+  "procedure": {
+    "kind": "documented",
+    "reference": "daily-workflow.json",
+    "external_effect": {
+      "mode": "none"
+    }
+  },
+  "authority_refs": [
+    "daily-workflow.json"
+  ],
+  "reporting": {
+    "task_id": "task-daily",
+    "receipt_fields": [
+      "workflow_id",
+      "scheduled_for",
+      "outcome",
+      "run_id"
+    ]
+  },
+  "receipt": {
+    "required_fields": [
+      "workflow_id",
+      "scheduled_for",
+      "outcome",
+      "run_id"
+    ]
+  },
+  "data_sensitivity": "internal",
+  "evidence_retention": {
+    "policy": "bounded",
+    "days": 30
+  },
+  "revision": 1
+}

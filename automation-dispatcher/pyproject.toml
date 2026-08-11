@@ -1,0 +1,30 @@
+[build-system]
+requires = ["uv_build>=0.12.3,<0.13"]
+build-backend = "uv_build"
+
+[project]
+name = "automation-dispatcher"
+version = "0.1.0"
+description = "Durable SQLite-backed dispatch for scheduled agent workflows"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "Tyler Kneisly" }]
+dependencies = []
+
+[project.scripts]
+automation-dispatcher = "automation_dispatcher.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8.3,<9"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.uv.build-backend]
+module-name = "automation_dispatcher"
+module-root = "src"
+source-include = ["SKILL.md", "agents/**", "references/**", "workflows/**"]
+source-exclude = ["*.sqlite", "*.sqlite3", "*.db", "*-journal", "*-wal", "*-shm", ".automation-dispatcher/**", "backups/**", "exports/**", ".env", ".env.*"]
+wheel-exclude = ["*.sqlite", "*.sqlite3", "*.db", "*-journal", "*-wal", "*-shm", ".automation-dispatcher/**", "backups/**", "exports/**", ".env", ".env.*"]
