@@ -1,0 +1,7 @@
+interface:
+  display_name: "Automation Dispatcher"
+  short_description: "Run durable task-bound workflow collections"
+  default_prompt: "Use $automation-dispatcher to safely inspect and operate an explicitly identified workflow collection and its external dispatcher database."
+
+policy:
+  allow_implicit_invocation: true

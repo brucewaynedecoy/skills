@@ -1,0 +1,20 @@
+.venv/
+dist/
+build/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+
+# Mutable dispatcher state never belongs in source control.
+.automation-dispatcher/
+*.sqlite
+*.sqlite3
+*.db
+*-journal
+*-wal
+*-shm
+backups/
+exports/
+.env
+.env.*
