@@ -142,6 +142,20 @@ This is the living register for confirmed product drift, unresolved decisions, a
 
 **To close**: Establish release validation that detects documented-command drift and verifies supported minimum versions.
 
+### R-006 Implementation invents unsupported performance gates
+
+| Status | Decision | Follow-Up |
+| --- | --- | --- |
+| Open | Automation Dispatcher W1 R0 has no performance SLO; only configured-limit and non-hang checks are normative. Numeric targets require an explicit PRD decision with an approved workload, environment, rationale, and measurement method, and durability or safety must never be traded for speed. | Add matching PRD and W1 R0 backlog guardrails, then review implementation evidence for invented targets before phase acceptance. |
+
+**Issue**: Broad proof language such as bounded, complete, or full can lead implementation agents to invent latency, throughput, memory, package-size, or test-duration targets that the product does not require.
+
+**Why it matters**: Unsupported numeric gates can create fragile environment-dependent tests, encourage implementation loops around unattainable thresholds, and pressure agents to weaken SQLite durability, transactional safety, auditability, receipt handling, or backup integrity for speed.
+
+**Recommendation**: Treat configured timeout and finite-scope assertions as termination and bounded-work safeguards rather than product performance benchmarks. Reject any new numeric performance gate unless the active Automation Dispatcher PRD explicitly defines its approved workload, environment, rationale, and measurement method.
+
+**To close**: Confirm that the Automation Dispatcher PRD and W1 R0 backlog contain these guardrails and that implementation review finds no numeric performance target without the required explicit PRD decision or any durability or safety tradeoff made for speed.
+
 ## Source Anchors
 
 - [Automation Dispatcher W1 R0 plan](../plans/2026-08-11-w1-r0-automation-dispatcher-guided-lifecycle/00-overview.md)

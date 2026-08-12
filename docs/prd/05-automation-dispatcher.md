@@ -184,8 +184,21 @@ Code anchors:
 ### State and portability
 
 - The CLI always receives an explicit database path. Runtime databases, backups, exports, and related mutable files are rejected inside the skill source, installed skill roots, installed CLI environments, broad filesystem roots, and configured forbidden roots.
-- SQLite connections enable foreign keys, a bounded busy timeout, full synchronization, and transactional writes. Writer contention fails in bounded time rather than silently weakening durability.
+- SQLite connections enable foreign keys, a bounded busy timeout, full synchronization, and transactional writes. Writer contention must terminate no later than the configured busy timeout plus a generous, platform-tolerant test allowance rather than silently weakening durability. This is a non-hang and durability requirement, not a latency benchmark.
 - Migrations are immutable packaged resources. Legacy workflow-owned timing may be promoted only when every workflow in a dispatcher supplies complete, identical, valid timing; otherwise migration fails transactionally.
+
+### Performance and resource policy
+
+- W1 R0 defines no latency, throughput, startup-time, memory, package-size, or test-duration service-level objective. Performance acceptance is limited to preventing hangs and unbounded work under explicit configured limits such as the SQLite busy timeout, finite discovery scope, finite lookback, and bounded retries.
+- Wall-clock assertions may use generous, platform-tolerant thresholds only as non-hang safeguards. They are not product benchmarks and must not become release gates for response time or throughput.
+- Implementations must not weaken SQLite `FULL` synchronization, transactionality, audit integrity, receipt safety, or backup integrity to improve speed or satisfy a timing check.
+- Any future numeric performance target requires an explicit user-approved workload, execution environment, rationale, measurement method, and PRD amendment. Observed slowness may be documented and prioritized, but it cannot become a W1 R0 blocking gate without that authority or a violation of an explicit configured limit.
+
+Code anchors:
+
+- `automation-dispatcher/src/automation_dispatcher/database.py`
+- `automation-dispatcher/src/automation_dispatcher/backup.py`
+- `automation-dispatcher/tests/test_acceptance_boundaries.py`
 
 ### Discovery snapshot and lifecycle plan
 

@@ -74,7 +74,7 @@ This phase brings the agent experience, CLI, documentation, packaging, and valid
 ### Tasks
 
 - [ ] t13: Run the full locked test suite plus focused lifecycle, scheduling, migration, concurrency, crash-window, host-adapter, receipt, backup, contamination, and acceptance tests.
-- [ ] t14: Validate bounded SQLite writer contention, duplicate full heartbeat invocation, DST audit evidence, effective-dated schedule revisions, activation cutoffs, and all supported external-effect recovery modes.
+- [ ] t14: Validate that SQLite writer contention returns a lock failure once the configured SQLite busy timeout elapses, allowing a generous platform-independent test tolerance; treat this as a non-hang and durability proof rather than a latency benchmark, never weaken SQLite `FULL` synchronization to satisfy it, and also validate duplicate full heartbeat invocation, DST audit evidence, effective-dated schedule revisions, activation cutoffs, and all supported external-effect recovery modes.
 - [ ] t15: Build wheel and sdist from a deliberately contaminated checkout and verify packaged migrations and skill resources are present while databases, WAL/SHM/journals, backups, exports, secrets, caches, and lifecycle runtime artifacts are absent.
 - [ ] t16: Install the exact built wheel into an isolated uv tool environment, run help/version/init/lifecycle smoke tests outside the checkout, and run the same exact source through `uvx`.
 - [ ] t17: Run the standard skill validator, documentation link validation, distribution validator, lockfile check, compile/static checks, and any repository-required quality gates.
@@ -87,6 +87,7 @@ This phase brings the agent experience, CLI, documentation, packaging, and valid
 - Exact-wheel install and `uvx` execution work outside the source checkout.
 - The installed skill is discoverable and routes representative prompts to the guided lifecycle.
 - Any unavailable environment-specific gate is reported as pending rather than treated as passed.
+- No unsupported latency, throughput, startup-time, memory, package-size, test-duration, or other performance benchmark is a W1 R0 release gate; any numeric performance target requires explicit normative PRD authority.
 
 ### Dependencies
 
@@ -97,7 +98,7 @@ This phase brings the agent experience, CLI, documentation, packaging, and valid
 ### Tasks
 
 - [ ] t19: Run an independent read-only review against all applicable active PRDs, the W1 R0 plan, this backlog, the current diff, and the frozen validation evidence.
-- [ ] t20: Reconcile D-001, R-001 through R-005, and any newly discovered risks in the canonical risk register; close items only with direct implementation and test evidence.
+- [ ] t20: Reconcile D-001, R-001 through R-006, and any newly discovered risks in the canonical risk register; close items only with direct implementation and test evidence.
 - [ ] t21: Update the PRD index and follow-on notes only where implementation evidence changes current status; preserve the distinction between source-complete, installed, initialized, live-UAT, and deployed.
 - [ ] t22: Produce a scoped release/upgrade handoff with exact changed files, compatibility notes, migration behavior, install and rollback commands, artifact locations, and validation results.
 - [ ] t23: Prepare a separate live-adoption packet for the user's existing scheduled tasks, including discovery scope, proposed collection mapping, safe cutover plan, approval point, observation period, and rollback; do not execute it automatically.

@@ -28,7 +28,7 @@ This phase converts the remaining implementation questions into explicit, versio
 
 - [ ] t1: Capture the current CLI command inventory, public Python modules, database schema version, migration checksums, package contents, installed entrypoint behavior, and full passing test baseline.
 - [ ] t2: Record the current runtime invariants that the lifecycle work must not weaken: collection-owned schedules, effective-dated revisions, occurrence uniqueness, claim fencing, external-effect ambiguity handling, atomic terminal receipts, audit chaining, backup integrity, and external runtime paths.
-- [ ] t3: Define a compatibility matrix for existing schema-v2 workflow definitions, existing collection databases, current low-level commands, JSON result metadata, exit codes, and packaged migration resources.
+- [ ] t3: Define a compatibility matrix for existing schema-v2 workflow definitions, existing collection databases, current low-level commands, JSON result metadata, exit codes, and packaged migration resources; record that W1 R0 has no latency, throughput, startup-time, memory, package-size, or test-duration SLO, that timing assertions verify configured limits or non-hanging termination only, and that any numeric performance gate requires explicit normative PRD authority with an approved workload, execution environment, rationale, and measurement method.
 - [ ] t4: Add a frozen regression fixture representing an existing collection and prove that opening, migrating, inspecting, backing up, and dispatching it remains supported.
 
 ### Acceptance criteria
@@ -36,6 +36,7 @@ This phase converts the remaining implementation questions into explicit, versio
 - The baseline names exact commands, APIs, schema versions, fixtures, and validation commands rather than relying on prose alone.
 - Existing low-level users have an explicit compatibility promise and any permitted change has a named migration or deprecation path.
 - The frozen collection fixture passes before lifecycle implementation begins.
+- The compatibility envelope records that W1 R0 has no unsupported performance benchmark or numeric performance gate and distinguishes configured-limit or non-hang checks from product latency targets.
 
 ### Dependencies
 

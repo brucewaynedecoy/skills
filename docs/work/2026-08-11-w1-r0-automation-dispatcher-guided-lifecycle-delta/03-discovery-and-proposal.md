@@ -27,7 +27,7 @@ This phase implements discovery and proposal only. The skill inspects available 
 - [ ] t1: Implement a read-only host adapter that inventories relevant scheduled tasks, task targets, prompts, schedules, timezones, enabled/paused state, project or working-directory context, and observable identity/revision metadata.
 - [ ] t2: Normalize host observations into the versioned discovery snapshot while preserving source identity, uncertainty, unsupported fields, and raw references needed for later read-back.
 - [ ] t3: Detect already-managed heartbeats and existing manifests so repeat discovery distinguishes current collections, unmanaged legacy tasks, stale artifacts, and unrelated schedules.
-- [ ] t4: Add bounded discovery filters and explicit selection so the user can scope a large task inventory without silently omitting candidates.
+- [ ] t4: Add discovery filters, explicit selection, bounded input windows, and pagination so the user can scope a large task inventory without silently omitting candidates; bounded discovery means explicit selection, filter, input, or pagination scope and is not a throughput or latency target.
 - [ ] t5: Implement safe handling for missing host capabilities, inaccessible tasks, deleted targets, incomplete schedule metadata, and environment changes between reads.
 
 ### Acceptance criteria
@@ -36,6 +36,7 @@ This phase implements discovery and proposal only. The skill inspects available 
 - Task titles such as “Daily Automations” and “Weekly Automations” are treated as labels, never as collection identity or schedule authority.
 - Paused, inaccessible, unsupported, and already-managed items are visible rather than silently dropped.
 - A second discovery against unchanged state is a no-op with the same semantic result.
+- Every discovery bound is expressed as explicit selection, filter, input, or pagination scope rather than as an inferred performance benchmark.
 
 ### Dependencies
 
