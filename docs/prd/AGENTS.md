@@ -14,3 +14,7 @@ This directory is the active product-authority namespace.
 - Before writing, read `.make-docs/references/system/execution-workflow.md`, `.make-docs/contracts/system/output-contract.md`, `.make-docs/references/system/prd-change-management.md`, and the matching `prd-*` template in `.make-docs/templates/system/`.
 - Treat the reference docs as the authority for namespace lifecycle, ownership, numbering, requirement history, and validation; `make-docs run prd authority validate --target-root <project>` must exit zero before downstream work consumes the set, and invalid or escaping docs roots are blocking validation failures.
 <!-- make-docs:end -->
+
+- Repository-specific ownership rule: after the fixed `00` through `04` core, maintain exactly one top-level PRD for each maintained skill directory that contains a `SKILL.md`. Name it `NN-<skill-directory-slug>.md`. Keep that skill's runtime, lifecycle, artifact, integration, and experience requirements as sections of the owning skill PRD; do not fan one skill out into additional active PRDs unless the user explicitly changes this repository-wide rule.
+- Governing invariant: `docs/prd/` describes the current authoritative shape of the product. It must never describe the editorial operation used to change that authority.
+- In this repository, a skill's existing PRD is the suitable owner for its internal capabilities, subsystems, and integrations. Put supporting detail in designs, plans, work backlogs, skill references, or library documentation without making those artifacts parallel product authority.
