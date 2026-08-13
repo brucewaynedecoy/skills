@@ -38,6 +38,8 @@ For repository development, run `uv run automation-dispatcher`. For live heartbe
 
 Always provide the explicit database path required by the CLI. Refuse a database inside the source checkout, an installed skill directory, or an installed CLI environment. Runtime state belongs in the verified collection task's durable working directory.
 
+For guided-lifecycle artifact validation, explanation, resumable status, or semantic verification, use the grouped `lifecycle plan`, `lifecycle explain`, `lifecycle status`, and `lifecycle verify` commands with explicit state/source roots. Phase 2 `lifecycle apply` is planning-only and must include `--dry-run`; it performs no registry, artifact, host, task, automation, or receipt mutation. Treat `record-cutover` and `heartbeat-template` as reserved until their later implementation phases.
+
 Resolve relative script procedure references from the registered definition file's directory. Require every resolved script to remain inside an explicit approved root; never rely on the heartbeat's current working directory.
 
 ## Dispatch safely

@@ -33,6 +33,13 @@ from .database import (
     schema_version,
 )
 from .definitions import normalize_definition
+from .lifecycle_artifacts import (
+    ARTIFACT_MODELS,
+    LifecycleArtifact,
+    load_artifact,
+)
+from .lifecycle_contracts import LifecycleContractError, seal_artifact, validate_artifact
+from .lifecycle_engine import lifecycle_status, plan_step, semantic_drift_report
 from .receipts import (
     acknowledge_receipt,
     create_receipt,
@@ -1101,6 +1108,237 @@ def _cmd_migrate(args: argparse.Namespace) -> dict[str, Any]:
         conn.close()
 
 
+def _lifecycle_source_revision() -> str:
+    return os.environ.get("AUTOMATION_DISPATCHER_SOURCE_REVISION", "unknown")
+
+
+def _lifecycle_result(
+    command: str,
+    status: str,
+    *,
+    identity: Mapping[str, Any] | None = None,
+    warnings: Sequence[str] = (),
+    next_action: Mapping[str, Any] | None = None,
+    error: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    value = seal_artifact(
+        {
+            "schema_version": 1,
+            "artifact_type": "command_result",
+            "command": command,
+            "status": status,
+            "identity": {
+                "cli_version": __version__,
+                **dict(identity or {}),
+            },
+            "database_path": None,
+            "source_revision": _lifecycle_source_revision(),
+            "event": None,
+            "warnings": list(warnings),
+            "next_action": dict(next_action) if next_action is not None else None,
+            "error": dict(error) if error is not None else None,
+        }
+    )
+    return validate_artifact("command_result", value)
+
+
+def _lifecycle_load(
+    args: argparse.Namespace, path: str, artifact_type: str
+) -> LifecycleArtifact:
+    source_controlled = artifact_type == "collection_manifest"
+    return load_artifact(
+        path,
+        artifact_type,
+        storage_owner="source_controlled" if source_controlled else "external_state",
+        explicit_root=(args.repository_root if source_controlled else args.state_root),
+        source_root=None if source_controlled else args.source_root,
+        installed_roots=tuple(args.installed_root or ()),
+    )
+
+
+def _lifecycle_progress(args: argparse.Namespace) -> list[dict[str, Any]]:
+    return [
+        _lifecycle_load(args, path, "progress_record").as_dict()
+        for path in (args.progress or ())
+    ]
+
+
+def _lifecycle_command_request(
+    args: argparse.Namespace, plan: Mapping[str, Any] | None = None
+) -> dict[str, Any]:
+    command = args.lifecycle_command
+    input_path = getattr(args, "input", None) or getattr(args, "plan", None)
+    request = seal_artifact(
+        {
+            "schema_version": 1,
+            "artifact_type": "lifecycle_command",
+            "command": command,
+            "actor": args.actor,
+            "reason": args.reason,
+            "database_path": None,
+            "plan_id": plan.get("plan_id") if plan is not None else None,
+            "plan_hash": plan.get("content_hash") if plan is not None else None,
+            "input_path": (
+                str(Path(input_path).expanduser().resolve(strict=False)) if input_path else None
+            ),
+        }
+    )
+    return validate_artifact("lifecycle_command", request)
+
+
+def _cmd_lifecycle(args: argparse.Namespace) -> dict[str, Any]:
+    command = args.lifecycle_command
+    request: dict[str, Any] | None = None
+    try:
+        request = _lifecycle_command_request(args)
+        if command == "plan":
+            artifact = _lifecycle_load(args, args.input, args.artifact_type)
+            return _lifecycle_result(
+                command,
+                "completed",
+                identity={
+                    "artifact_type": args.artifact_type,
+                    "command_request_hash": request["content_hash"],
+                    "content_hash": artifact.content_hash,
+                    "input_path": str(Path(args.input).expanduser().resolve(strict=False)),
+                    "normalized": artifact.as_dict(),
+                },
+                next_action={"type": "review_artifact", "artifact_type": args.artifact_type},
+            )
+        plan = _lifecycle_load(args, args.plan, "lifecycle_plan").as_dict()
+        request = _lifecycle_command_request(args, plan)
+        progress = _lifecycle_progress(args)
+        if command == "explain":
+            blocked = bool(plan["unresolved_decisions"])
+            return _lifecycle_result(
+                command,
+                "blocked" if blocked else "completed",
+                identity={
+                    "plan_id": plan["plan_id"],
+                    "command_request_hash": request["content_hash"],
+                    "plan_hash": plan["content_hash"],
+                    "collections": plan["collections"],
+                    "workflow_mappings": plan["workflow_mappings"],
+                    "approved_scope": plan["approved_scope"],
+                    "expected_cli_operations": plan["expected_cli_operations"],
+                    "expected_host_operations": plan["expected_host_operations"],
+                    "rollback_steps": plan["rollback_steps"],
+                    "unresolved_decisions": plan["unresolved_decisions"],
+                },
+                next_action=(
+                    {"type": "resolve_decisions", "items": plan["unresolved_decisions"]}
+                    if blocked
+                    else {"type": "review_plan"}
+                ),
+            )
+        if command == "status":
+            status = lifecycle_status(plan, progress)
+            recovery_required = any(
+                disposition == "reconciliation_required"
+                for disposition in status["recovery"].values()
+            )
+            return _lifecycle_result(
+                command,
+                status["status"],
+                identity={**status, "command_request_hash": request["content_hash"]},
+                next_action={
+                    "type": "reconcile_progress" if recovery_required else "resume_or_review",
+                    "plan_id": plan["plan_id"],
+                },
+            )
+        if command == "verify":
+            observed = _lifecycle_load(args, args.observed, args.observed_type).as_dict()
+            report = semantic_drift_report(plan, observed).as_dict()
+            drifted = report["status"] != "unchanged"
+            return _lifecycle_result(
+                command,
+                "conflict" if drifted else "completed",
+                identity={
+                    "plan_id": plan["plan_id"],
+                    "command_request_hash": request["content_hash"],
+                    "plan_hash": plan["content_hash"],
+                    "drift_report": report,
+                },
+                next_action=(
+                    {"type": "rediscover_and_replan"}
+                    if drifted
+                    else {"type": "continue_review"}
+                ),
+            )
+        if command == "apply":
+            if not args.dry_run:
+                raise LifecycleContractError(
+                    "dry_run_required",
+                    "Phase 2 lifecycle apply is planning-only and requires --dry-run",
+                )
+            step = plan_step(
+                plan,
+                stage=args.stage,
+                action=args.action,
+                collection_id=args.collection_id,
+                progress=progress,
+            )
+            if step.writes:
+                dry_run = {
+                    **step.as_dict(),
+                    "writes_prevented": list(step.writes),
+                    "host_requests_prevented": list(step.host_requests),
+                    "mutation_count": 0,
+                }
+            else:
+                dry_run = {**step.as_dict(), "mutation_count": 0}
+            if step.step_id in {item["step_id"] for item in progress if item["status"] == "completed"}:
+                result_status = "no_op"
+            elif step.blockers:
+                result_status = "blocked"
+            else:
+                result_status = "completed"
+            return _lifecycle_result(
+                command,
+                result_status,
+                identity={
+                    "plan_id": plan["plan_id"],
+                    "command_request_hash": request["content_hash"],
+                    "plan_hash": plan["content_hash"],
+                    "dry_run": True,
+                    "step_plan": dry_run,
+                },
+                next_action=step.next_action,
+            )
+        raise LifecycleContractError(
+            "unsupported_lifecycle_command", f"unsupported lifecycle command: {command}"
+        )
+    except LifecycleContractError as exc:
+        status = {
+            "optimistic_concurrency_conflict": "conflict",
+            "source_snapshot_drift": "conflict",
+            "unsupported_future": "blocked",
+            "migration_required": "blocked",
+            "forbidden_artifact_path": "blocked",
+            "symlink_artifact_path": "blocked",
+            "blocked_prerequisite": "blocked",
+        }.get(exc.code, "failed")
+        return _lifecycle_result(
+            command,
+            status,
+            identity={
+                "plan_id": getattr(args, "plan_id", None),
+                "input_path": getattr(args, "input", None) or getattr(args, "plan", None),
+                "command_request_hash": request.get("content_hash") if request else None,
+                "exit_code": 2 if status == "failed" else 1,
+            },
+            next_action={"type": "correct_or_reconcile", "reason": exc.code},
+            error={"code": exc.code, "message": str(exc), "details": exc.details},
+        )
+
+
+def _add_lifecycle_path_arguments(command: argparse.ArgumentParser) -> None:
+    command.add_argument("--state-root")
+    command.add_argument("--repository-root")
+    command.add_argument("--source-root", required=True)
+    command.add_argument("--installed-root", action="append")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="automation-dispatcher")
     parser.add_argument("--database", "--db", dest="database", help="External dispatcher SQLite database")
@@ -1250,12 +1488,54 @@ def build_parser() -> argparse.ArgumentParser:
     export.set_defaults(handler=_cmd_export)
     migration = sub.add_parser("migrate")
     migration.set_defaults(handler=_cmd_migrate)
+
+    lifecycle = sub.add_parser("lifecycle")
+    lifecycle_sub = lifecycle.add_subparsers(dest="lifecycle_command", required=True)
+
+    lifecycle_plan = lifecycle_sub.add_parser("plan")
+    lifecycle_plan.add_argument("--artifact-type", required=True, choices=tuple(ARTIFACT_MODELS))
+    lifecycle_plan.add_argument("--input", required=True)
+    lifecycle_plan.add_argument("--actor", required=True)
+    lifecycle_plan.add_argument("--reason", required=True)
+    _add_lifecycle_path_arguments(lifecycle_plan)
+    lifecycle_plan.set_defaults(handler=_cmd_lifecycle)
+
+    for name in ("explain", "status", "verify", "apply"):
+        command = lifecycle_sub.add_parser(name)
+        command.add_argument("--plan", required=True)
+        command.add_argument("--progress", action="append")
+        command.add_argument("--actor", required=True)
+        command.add_argument("--reason", required=True)
+        _add_lifecycle_path_arguments(command)
+        if name == "verify":
+            command.add_argument("--observed", required=True)
+            command.add_argument(
+                "--observed-type", required=True, choices=tuple(ARTIFACT_MODELS)
+            )
+        if name == "apply":
+            command.add_argument("--stage", required=True)
+            command.add_argument("--action", required=True)
+            command.add_argument("--collection-id")
+            command.add_argument("--dry-run", action="store_true")
+        command.set_defaults(handler=_cmd_lifecycle)
     return parser
 
 
 def _human(result: Any) -> str:
     if isinstance(result, Mapping):
         status = result.get("status", "ok")
+        if result.get("artifact_type") == "command_result":
+            identity = result.get("identity") if isinstance(result.get("identity"), Mapping) else {}
+            next_action = result.get("next_action")
+            error = result.get("error")
+            parts = [str(status)]
+            if identity.get("plan_id"):
+                parts.append(f"plan_id={identity['plan_id']}")
+            if isinstance(next_action, Mapping) and next_action.get("type"):
+                parts.append(f"next_action={next_action['type']}")
+            if isinstance(error, Mapping) and error.get("code"):
+                parts.append(f"blocker={error['code']}")
+            return " ".join(parts)
         identifiers = [
             f"{key}={result[key]}"
             for key in ("dispatcher_id", "workflow_id", "run_id", "receipt_id")
@@ -1270,7 +1550,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         result = args.handler(args)
-        if isinstance(result, dict):
+        if isinstance(result, dict) and result.get("artifact_type") != "command_result":
             result.setdefault("database_path", _database_path(args) if getattr(args, "database", None) else None)
             result.setdefault("cli_version", __version__)
             result.setdefault(
@@ -1285,10 +1565,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(json.dumps(result, sort_keys=True, ensure_ascii=False, default=str))
         else:
             print(_human(result))
+        if isinstance(result, Mapping) and result.get("artifact_type") == "command_result":
+            identity = result.get("identity")
+            if isinstance(identity, Mapping) and identity.get("exit_code") in {1, 2}:
+                return int(identity["exit_code"])
         if isinstance(result, Mapping) and (
             result.get("ok") is False
             or result.get("status") in {
-                "failed", "route_mismatch", "route_unattested", "effect_unknown", "error"
+                "failed", "route_mismatch", "route_unattested", "effect_unknown", "error",
+                "blocked", "conflict"
             }
         ):
             return 1

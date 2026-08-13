@@ -47,7 +47,7 @@ Guided lifecycle work must preserve all of these invariants:
 | Packaged migrations | Existing filenames and bytes are immutable; new resources are additive. | Frozen SHA-256 inventory and packaging tests. |
 | Installed entrypoint | The console script continues to invoke `automation_dispatcher.cli:main`. | Distribution validation and installed-wheel smoke test. |
 
-The guided-lifecycle namespace and contract resources are additive. Phase 1 does not change the existing parser, database schema, scheduling engine, receipt protocol, or packaging entrypoint.
+The guided-lifecycle namespace and contract resources are additive. Phase 1 did not change the existing parser. Phase 2 adds the grouped lifecycle parser without changing the existing low-level command grammar, database schema, scheduling engine, receipt protocol, or packaging entrypoint.
 
 ## Performance boundary
 

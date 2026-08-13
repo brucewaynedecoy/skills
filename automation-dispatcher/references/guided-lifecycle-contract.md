@@ -31,7 +31,7 @@ automation-dispatcher lifecycle record-cutover
 automation-dispatcher lifecycle heartbeat-template
 ```
 
-Phase 1 freezes this grammar and its JSON contracts; it does not expose the namespace through the current parser. Existing low-level commands remain unchanged.
+Phase 1 froze this grammar and its JSON contracts. Phase 2 exposes the read-only `plan`, `explain`, `status`, and `verify` foundation plus planning-only `apply --dry-run`; `record-cutover` and `heartbeat-template` remain reserved for later phases. Existing low-level commands remain unchanged.
 
 Every lifecycle command request uses the `lifecycle_command` schema. Every machine-readable result uses `command_result` and carries schema version, command, status, collection/plan identity, resolved database path, source revision, event evidence, warnings, next action, and structured error. Unknown fields and unknown schema versions fail closed.
 
@@ -57,6 +57,10 @@ Each entry has a JSON Schema reference in `contracts/v1/catalog.json`. Canonical
 Only schema version 1 is accepted. Schemas reject unknown fields at defined object boundaries. Persistent artifacts must not contain credentials, passwords, prompts, raw prompts, secrets, signed URLs, tokens, transcripts, or equivalent raw sensitive material. Sensitive-key matching normalizes snake case, punctuation, and camel case, so names such as `api_token`, `accessToken`, and `prompt_text` are also forbidden. Only explicit stable-reference suffixes such as `_hash`, `_id`, and `_identifier` exempt a sensitive stem. Store stable identifiers, hashes, bounded summaries, and explicit evidence references instead.
 
 Optimistic concurrency is explicit: plans bind the discovery snapshot hash; operations bind plan ID/hash, collection identity, target revision/state hash, and approval ID; results bind the request hash. A mismatch is stale or conflicting state, never an invitation to guess.
+
+Phase 2 supplies typed version-1 artifact views, schema-evolution classification, explicit-path atomic I/O, allowlisted sanitized report exports, deterministic operation and step IDs, resumable progress, semantic drift reports, recovery classification, registry revision fences, and audit-bound lifecycle transition events. Atomic writes require an already-existing owner-controlled parent, use owner-only permissions where supported, and preserve either the prior valid artifact or the complete replacement across injected failures.
+
+Registry-bound progress persistence requires an active caller-owned SQLite transaction plus exact plan, actor, dispatcher revision, and configuration-hash context. The persistence helper appends the immutable lifecycle event under a savepoint, writes the external artifact with the event ID, and returns the event ID/hash without committing the caller's transaction. A write failure rolls back the new event; completed replay returns the original event without duplication; and an external artifact whose referenced event was rolled back fails closed as `progress_audit_missing`.
 
 ## Manifest discovery and multi-collection identity
 

@@ -510,7 +510,8 @@ def test_frozen_baseline_inventory_remains_available() -> None:
     subcommands = next(
         action for action in parser._actions if isinstance(action, argparse._SubParsersAction)
     )
-    assert sorted(subcommands.choices) == baseline["cli_commands"]
+    assert set(baseline["cli_commands"]) <= set(subcommands.choices)
+    assert set(subcommands.choices) - set(baseline["cli_commands"]) == {"lifecycle"}
 
     modules = {f"automation_dispatcher.{item.name}" for item in pkgutil.iter_modules(automation_dispatcher.__path__)}
     modules.add("automation_dispatcher.__init__")
