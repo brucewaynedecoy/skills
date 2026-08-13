@@ -13,6 +13,10 @@ MIGRATION_SUFFIXES = (
     "automation_dispatcher/migrations/0001_initial.sql",
     "automation_dispatcher/migrations/0002_collection_model.sql",
 )
+CONTRACT_SUFFIXES = (
+    "automation_dispatcher/contracts/v1/catalog.json",
+    "automation_dispatcher/contracts/v1/contracts.schema.json",
+)
 SDIST_REQUIRED_SUFFIXES = (
     "README.md",
     "SKILL.md",
@@ -20,6 +24,8 @@ SDIST_REQUIRED_SUFFIXES = (
     "references/operator-runbook.md",
     "references/registry-contract.md",
     "references/workflow-definition.md",
+    "references/baseline-compatibility.md",
+    "references/guided-lifecycle-contract.md",
 )
 FORBIDDEN_SUFFIXES = (".sqlite", ".sqlite3", ".db", "-journal", "-wal", "-shm")
 FORBIDDEN_PARTS = {".automation-dispatcher", "backups", "exports"}
@@ -49,9 +55,9 @@ def is_forbidden(name: str) -> bool:
 def validate(path: Path) -> list[str]:
     names = archive_names(path)
     errors: list[str] = []
-    for suffix in MIGRATION_SUFFIXES:
+    for suffix in (*MIGRATION_SUFFIXES, *CONTRACT_SUFFIXES):
         if not any(name.endswith(suffix) for name in names):
-            errors.append(f"{path.name}: missing packaged migration {suffix}")
+            errors.append(f"{path.name}: missing packaged resource {suffix}")
     forbidden = sorted(name for name in names if is_forbidden(name))
     if forbidden:
         errors.append(f"{path.name}: forbidden runtime state: {', '.join(forbidden)}")

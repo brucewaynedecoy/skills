@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://automation-dispatcher.local/contracts/v1/contracts.schema.json",
+  "title": "Automation Dispatcher guided lifecycle contracts v1",
+  "$defs": {
+    "approval_envelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "artifact_type", "approval_id", "plan_id", "plan_hash", "collection_id", "expected_host_state_hash", "mutation_hashes", "safe_cutover_boundary", "actor", "approved_at", "expires_at", "reconciliation_evidence", "content_hash"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "artifact_type": {"const": "approval_envelope"},
+        "approval_id": {"type": "string", "minLength": 1},
+        "plan_id": {"type": "string", "minLength": 1},
+        "plan_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "collection_id": {"type": "string", "minLength": 1},
+        "expected_host_state_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "mutation_hashes": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^[0-9a-f]{64}$"}},
+        "safe_cutover_boundary": {"type": "string", "minLength": 1},
+        "actor": {"type": "string", "minLength": 1},
+        "approved_at": {"type": "string", "format": "date-time"},
+        "expires_at": {"type": "string", "format": "date-time"},
+        "reconciliation_evidence": {"type": "array", "items": {"type": "string"}},
+        "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "collection_manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "artifact_type", "manifest_id", "dispatcher_id", "schedule", "timezone", "route", "heartbeat_requirement", "workflow_definition_locators", "required_versions", "database_locator", "content_hash"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "artifact_type": {"const": "collection_manifest"},
+        "manifest_id": {"type": "string", "minLength": 1},
+        "dispatcher_id": {"type": "string", "minLength": 1},
+        "schedule": {"type": "object"},
+        "timezone": {"type": "string", "minLength": 1},
+        "route": {"type": "object"},
+        "heartbeat_requirement": {"type": "object"},
+        "workflow_definition_locators": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "required_versions": {"type": "object"},
+        "database_locator": {"type": "object", "additionalProperties": false, "required": ["kind", "path"], "properties": {"kind": {"const": "task_working_directory_relative"}, "path": {"type": "string", "minLength": 1, "pattern": "^(?![\\\\/])(?!~)(?![A-Za-z][A-Za-z0-9+.-]*:)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+"}}},
+        "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "command_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "artifact_type", "command", "status", "identity", "database_path", "source_revision", "event", "warnings", "next_action", "error", "content_hash"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "artifact_type": {"const": "command_result"},
+        "command": {"enum": ["plan", "explain", "apply", "status", "verify", "record-cutover", "heartbeat-template"]},
+        "status": {"enum": ["no_op", "blocked", "conflict", "failed", "completed", "in_progress"]},
+        "identity": {"type": "object"},
+        "database_path": {"type": ["string", "null"]},
+        "source_revision": {"type": "string", "minLength": 1},
+        "event": {"type": ["object", "null"]},
+        "warnings": {"type": "array", "items": {"type": "string"}},
+        "next_action": {"type": ["object", "null"]},
+        "error": {"type": ["object", "null"]},
+        "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "discovery_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "artifact_type", "snapshot_id", "observed_at", "actor", "environment_id", "scope", "tasks", "automations", "unsupported_capabilities", "warnings", "content_hash"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "artifact_type": {"const": "discovery_snapshot"},
+        "snapshot_id": {"type": "string", "minLength": 1},
+        "observed_at": {"type": "string", "format": "date-time"},
+        "actor": {"type": "string", "minLength": 1},
+        "environment_id": {"type": "string", "minLength": 1},
+        "scope": {"type": "object"},
+        "tasks": {"type": "array", "items": {"type": "object"}},
+        "automations": {"type": "array", "items": {"type": "object"}},
+        "unsupported_capabilities": {"type": "array", "items": {"type": "string"}},
+        "warnings": {"type": "array", "items": {"type": "string"}},
+        "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "host_capability_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "artifact_type", "environment_id", "observed_at", "capabilities", "content_hash"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "artifact_type": {"const": "host_capability_snapshot"},
+        "environment_id": {"type": "string", "minLength": 1},
+        "observed_at": {"type": "string", "format": "date-time"},
+        "capabilities": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": false, "required": ["name", "supported", "surface", "reason"], "properties": {"name": {"type": "string", "minLength": 1}, "supported": {"type": "boolean"}, "surface": {"type": ["string", "null"]}, "reason": {"type": "string", "minLength": 1}}}},
+        "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "host_mutation_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "artifact_type", "operation_id", "plan_id", "plan_hash", "collection_id", "target", "mutation", "actor", "reason", "approval_id", "content_hash"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "artifact_type": {"const": "host_mutation_request"},
+        "operation_id": {"type": "string", "minLength": 1},
+        "plan_id": {"type": "string", "minLength": 1},
+        "plan_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "collection_id": {"type": "string", "minLength": 1},
+        "target": {"type": "object", "additionalProperties": false, "required": ["kind", "id", "expected_revision", "expected_state_hash"], "properties": {"kind": {"enum": ["task", "automation", "message"]}, "id": {"type": "string", "minLength": 1}, "expected_revision": {"type": ["string", "null"]}, "expected_state_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}},
+        "mutation": {"type": "object", "additionalProperties": false, "required": ["action", "fields"], "properties": {"action": {"enum": ["create", "update", "disable", "post", "acknowledge"]}, "fields": {"type": "object"}}},
+        "actor": {"type": "string", "minLength": 1},
+        "reason": {"type": "string", "minLength": 1},
+        "approval_id": {"type": "string", "minLength": 1},
+        "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "host_mutation_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "artifact_type", "operation_id", "request_hash", "target", "status", "attempted_action", "observed_before", "observed_after", "evidence", "external_message_id", "content_hash"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "artifact_type": {"const": "host_mutation_result"},
+        "operation_id": {"type": "string", "minLength": 1},
+        "request_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "target": {"type": "object"},
+        "status": {"enum": ["completed", "no_op", "conflict", "failed", "effect_unknown"]},
+        "attempted_action": {"type": "string", "minLength": 1},
+        "observed_before": {"type": "object"},
+        "observed_after": {"type": ["object", "null"]},
+        "evidence": {"type": "array", "items": {"type": "string"}},
+        "external_message_id": {"type": ["string", "null"]},
+        "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "lifecycle_command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "artifact_type", "command", "actor", "reason", "database_path", "plan_id", "plan_hash", "input_path", "content_hash"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "artifact_type": {"const": "lifecycle_command"},
+        "command": {"enum": ["plan", "explain", "apply", "status", "verify", "record-cutover", "heartbeat-template"]},
+        "actor": {"type": "string", "minLength": 1},
+        "reason": {"type": "string", "minLength": 1},
+        "database_path": {"type": ["string", "null"]},
+        "plan_id": {"type": ["string", "null"]},
+        "plan_hash": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "input_path": {"type": ["string", "null"]},
+        "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "lifecycle_plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "artifact_type", "plan_id", "created_at", "actor", "source_snapshot_id", "source_snapshot_hash", "collections", "workflow_mappings", "exclusions", "unresolved_decisions", "approved_scope", "state_paths", "source_paths", "expected_cli_operations", "expected_host_operations", "occurrence_boundaries", "rollback_steps", "stage_status", "content_hash"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "artifact_type": {"const": "lifecycle_plan"},
+        "plan_id": {"type": "string", "minLength": 1},
+        "created_at": {"type": "string", "format": "date-time"},
+        "actor": {"type": "string", "minLength": 1},
+        "source_snapshot_id": {"type": "string", "minLength": 1},
+        "source_snapshot_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "collections": {"type": "array", "minItems": 1, "items": {"type": "object"}},
+        "workflow_mappings": {"type": "array", "items": {"type": "object"}},
+        "exclusions": {"type": "array", "items": {"type": "object"}},
+        "unresolved_decisions": {"type": "array", "items": {"type": "string"}},
+        "approved_scope": {"type": "array", "items": {"type": "string"}},
+        "state_paths": {"type": "array", "items": {"type": "string"}},
+        "source_paths": {"type": "array", "items": {"type": "string"}},
+        "expected_cli_operations": {"type": "array", "items": {"type": "object"}},
+        "expected_host_operations": {"type": "array", "items": {"type": "object"}},
+        "occurrence_boundaries": {"type": "array", "items": {"type": "object"}},
+        "rollback_steps": {"type": "array", "items": {"type": "string"}},
+        "stage_status": {"type": "object"},
+        "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "progress_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "artifact_type", "operation_id", "plan_id", "plan_hash", "stage", "step_id", "status", "started_at", "updated_at", "actor", "evidence", "dispatcher_id", "workflow_id", "event_id", "receipt_id", "content_hash"],
+      "properties": {
+        "schema_version": {"const": 1}, "artifact_type": {"const": "progress_record"}, "operation_id": {"type": "string", "minLength": 1}, "plan_id": {"type": "string", "minLength": 1}, "plan_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "stage": {"enum": ["discover", "propose", "initialize", "shadow_validate", "cut_over", "operate_evolve"]}, "step_id": {"type": "string", "minLength": 1}, "status": {"enum": ["pending", "running", "completed", "failed", "blocked"]}, "started_at": {"type": "string", "format": "date-time"}, "updated_at": {"type": "string", "format": "date-time"}, "actor": {"type": "string", "minLength": 1}, "evidence": {"type": "array", "items": {"type": "string"}}, "dispatcher_id": {"type": ["string", "null"]}, "workflow_id": {"type": ["string", "null"]}, "event_id": {"type": ["integer", "null"]}, "receipt_id": {"type": ["string", "null"]}, "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "readiness_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "artifact_type", "report_id", "plan_id", "plan_hash", "collection_id", "generated_at", "checks", "blockers", "unresolved_decisions", "tested_occurrence_boundary", "status", "content_hash"],
+      "properties": {
+        "schema_version": {"const": 1}, "artifact_type": {"const": "readiness_report"}, "report_id": {"type": "string", "minLength": 1}, "plan_id": {"type": "string", "minLength": 1}, "plan_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "collection_id": {"type": "string", "minLength": 1}, "generated_at": {"type": "string", "format": "date-time"}, "checks": {"type": "array", "minItems": 1, "items": {"type": "object"}}, "blockers": {"type": "array", "items": {"type": "string"}}, "unresolved_decisions": {"type": "array", "items": {"type": "string"}}, "tested_occurrence_boundary": {"type": "object"}, "status": {"enum": ["ready", "blocked", "warning"]}, "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "semantic_drift_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "artifact_type", "report_id", "plan_id", "plan_hash", "expected_source_hash", "observed_source_hash", "changes", "status", "generated_at", "content_hash"],
+      "properties": {
+        "schema_version": {"const": 1}, "artifact_type": {"const": "semantic_drift_report"}, "report_id": {"type": "string", "minLength": 1}, "plan_id": {"type": "string", "minLength": 1}, "plan_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "expected_source_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "observed_source_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "changes": {"type": "array", "items": {"type": "object"}}, "status": {"enum": ["unchanged", "drifted", "unknown"]}, "generated_at": {"type": "string", "format": "date-time"}, "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "artifact_type": "host_capability_snapshot",
+  "environment_id": "codex-target-phase1-2026-08-12",
+  "observed_at": "2026-08-12T18:00:00Z",
+  "capabilities": [
+    {"name": "tasks.list", "supported": false, "surface": null, "reason": "No callable Codex task or automation tool schema was exposed."},
+    {"name": "tasks.read", "supported": false, "surface": null, "reason": "No callable Codex task or automation tool schema was exposed."},
+    {"name": "automations.list", "supported": false, "surface": null, "reason": "No callable Codex task or automation tool schema was exposed."},
+    {"name": "automations.read", "supported": false, "surface": null, "reason": "No callable Codex task or automation tool schema was exposed."},
+    {"name": "tasks.ensure_stable", "supported": false, "surface": null, "reason": "No callable Codex task or automation tool schema was exposed."},
+    {"name": "automations.create_or_update_heartbeat", "supported": false, "surface": null, "reason": "No callable Codex task or automation tool schema was exposed."},
+    {"name": "automations.disable_legacy", "supported": false, "surface": null, "reason": "No callable Codex task or automation tool schema was exposed."},
+    {"name": "messages.post_receipt", "supported": false, "surface": null, "reason": "No callable Codex task or automation tool schema was exposed."},
+    {"name": "messages.acknowledge_receipt", "supported": false, "surface": null, "reason": "No callable Codex task or automation tool schema was exposed."},
+    {"name": "host.read_back", "supported": false, "surface": null, "reason": "No callable Codex task or automation tool schema was exposed."}
+  ],
+  "content_hash": "09c1e6e3d8b119dd40c123e674c6862e2d4e107974bc1cb901eaf915944642ed"
+}

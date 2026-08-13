@@ -26,10 +26,10 @@ This phase converts the remaining implementation questions into explicit, versio
 
 ### Tasks
 
-- [ ] t1: Capture the current CLI command inventory, public Python modules, database schema version, migration checksums, package contents, installed entrypoint behavior, and full passing test baseline.
-- [ ] t2: Record the current runtime invariants that the lifecycle work must not weaken: collection-owned schedules, effective-dated revisions, occurrence uniqueness, claim fencing, external-effect ambiguity handling, atomic terminal receipts, audit chaining, backup integrity, and external runtime paths.
-- [ ] t3: Define a compatibility matrix for existing schema-v2 workflow definitions, existing collection databases, current low-level commands, JSON result metadata, exit codes, and packaged migration resources; record that W1 R0 has no latency, throughput, startup-time, memory, package-size, or test-duration SLO, that timing assertions verify configured limits or non-hanging termination only, and that any numeric performance gate requires explicit normative PRD authority with an approved workload, execution environment, rationale, and measurement method.
-- [ ] t4: Add a frozen regression fixture representing an existing collection and prove that opening, migrating, inspecting, backing up, and dispatching it remains supported.
+- [x] t1: Capture the current CLI command inventory, public Python modules, database schema version, migration checksums, package contents, installed entrypoint behavior, and full passing test baseline.
+- [x] t2: Record the current runtime invariants that the lifecycle work must not weaken: collection-owned schedules, effective-dated revisions, occurrence uniqueness, claim fencing, external-effect ambiguity handling, atomic terminal receipts, audit chaining, backup integrity, and external runtime paths.
+- [x] t3: Define a compatibility matrix for existing schema-v2 workflow definitions, existing collection databases, current low-level commands, JSON result metadata, exit codes, and packaged migration resources; record that W1 R0 has no latency, throughput, startup-time, memory, package-size, or test-duration SLO, that timing assertions verify configured limits or non-hanging termination only, and that any numeric performance gate requires explicit normative PRD authority with an approved workload, execution environment, rationale, and measurement method.
+- [x] t4: Add a frozen regression fixture representing an existing collection and prove that opening, migrating, inspecting, backing up, and dispatching it remains supported.
 
 ### Acceptance criteria
 
@@ -47,12 +47,12 @@ This phase converts the remaining implementation questions into explicit, versio
 
 ### Tasks
 
-- [ ] t5: Define the six lifecycle stages and their legal transitions: discover, propose, initialize, shadow validate, cut over, and operate/evolve.
-- [ ] t6: Choose and document the grouped lifecycle CLI namespace and versioned JSON command schemas, including required identity, database, source-revision, event, warning, next-action, and error metadata.
-- [ ] t7: Define versioned schemas for the discovery snapshot, lifecycle plan, collection manifest, durable progress record, readiness report, semantic drift report, and host mutation request/result.
-- [ ] t8: Define canonical serialization, content hashing, schema-version negotiation, unknown-field handling, redaction rules, and optimistic-concurrency fields for every lifecycle artifact.
-- [ ] t9: Define the manifest locator contract for one or many collections, including explicit-path precedence, repository-relative resolution, database binding, heartbeat discoverability, and rejection of ambiguous or implicit home-directory guesses.
-- [ ] t10: Define artifact path policy: source-controlled inputs, external mutable state, optional sanitized exports, forbidden roots, symlink handling, permissions expectations, and cleanup ownership.
+- [x] t5: Define the six lifecycle stages and their legal transitions: discover, propose, initialize, shadow validate, cut over, and operate/evolve.
+- [x] t6: Choose and document the grouped lifecycle CLI namespace and versioned JSON command schemas, including required identity, database, source-revision, event, warning, next-action, and error metadata.
+- [x] t7: Define versioned schemas for the discovery snapshot, lifecycle plan, collection manifest, durable progress record, readiness report, semantic drift report, and host mutation request/result.
+- [x] t8: Define canonical serialization, content hashing, schema-version negotiation, unknown-field handling, redaction rules, and optimistic-concurrency fields for every lifecycle artifact.
+- [x] t9: Define the manifest locator contract for one or many collections, including explicit-path precedence, repository-relative resolution, database binding, heartbeat discoverability, and rejection of ambiguous or implicit home-directory guesses.
+- [x] t10: Define artifact path policy: source-controlled inputs, external mutable state, optional sanitized exports, forbidden roots, symlink handling, permissions expectations, and cleanup ownership.
 
 ### Acceptance criteria
 
@@ -69,12 +69,12 @@ This phase converts the remaining implementation questions into explicit, versio
 
 ### Tasks
 
-- [ ] t11: Verify current official Codex skill and scheduled-task behavior and inspect the callable host-tool schemas available in the target environment; record supported, unsupported, and environment-dependent capabilities.
-- [ ] t12: Define a host-adapter protocol for listing and reading tasks and automations, identifying a stable task target, creating or updating one collection heartbeat, disabling legacy schedules, posting receipts, acknowledging results, and reading back state.
-- [ ] t13: Define an approval envelope that binds the exact lifecycle-plan hash, expected host identities and revisions, requested mutations, safe cutover boundary, actor, expiry, and reconciliation evidence.
-- [ ] t14: Define fail-closed behavior for missing host tools, unsupported surfaces, stale reads, partial mutation, approval loss, lost acknowledgement, and host/API schema drift.
-- [ ] t15: Resolve Q-001, Q-002, and Q-003 in the risk register from the accepted contracts; update normative PRDs first if any resolution changes product behavior.
-- [ ] t16: Add contract tests and JSON fixtures that reject stale plans, mismatched hashes, ambiguous manifests, forbidden paths, unsupported schema versions, incomplete host results, and unapproved mutation attempts.
+- [x] t11: Verify current official Codex skill and scheduled-task behavior and inspect the callable host-tool schemas available in the target environment; record supported, unsupported, and environment-dependent capabilities.
+- [x] t12: Define a host-adapter protocol for listing and reading tasks and automations, identifying a stable task target, creating or updating one collection heartbeat, disabling legacy schedules, posting receipts, acknowledging results, and reading back state.
+- [x] t13: Define an approval envelope that binds the exact lifecycle-plan hash, expected host identities and revisions, requested mutations, safe cutover boundary, actor, expiry, and reconciliation evidence.
+- [x] t14: Define fail-closed behavior for missing host tools, unsupported surfaces, stale reads, partial mutation, approval loss, lost acknowledgement, and host/API schema drift.
+- [x] t15: Resolve Q-001, Q-002, and Q-003 in the risk register from the accepted contracts; update normative PRDs first if any resolution changes product behavior.
+- [x] t16: Add contract tests and JSON fixtures that reject stale plans, mismatched hashes, ambiguous manifests, forbidden paths, unsupported schema versions, incomplete host results, and unapproved mutation attempts.
 
 ### Acceptance criteria
 

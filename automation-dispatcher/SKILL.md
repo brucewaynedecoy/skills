@@ -25,6 +25,8 @@ Do not create, edit, disable, or delete a Codex task or automation unless the cu
 - Read [references/workflow-definition.md](references/workflow-definition.md) before registering or revising a workflow. Definitions bind membership and execution authority; they do not own schedules.
 - Read [references/registry-contract.md](references/registry-contract.md) before auditing collection configuration, schema, routes, runs, events, receipts, or identity assurance.
 - Read [references/operator-runbook.md](references/operator-runbook.md) before installation, collection initialization or schedule revision, dispatch, backup, restore verification, recovery, migration, receipt posting, or cutover.
+- Read [references/guided-lifecycle-contract.md](references/guided-lifecycle-contract.md) before lifecycle discovery, planning, manifest resolution, approval, shadow validation, host-adapter work, or multi-collection coordination.
+- Read [references/baseline-compatibility.md](references/baseline-compatibility.md) before changing an existing command, schema-v2 definition, database migration, installed entrypoint, or distribution resource.
 
 Load only the selected workflow definition and its registered authority references. Do not promote task conversation, unrelated memory, or another workflow's feedback into operational authority.
 

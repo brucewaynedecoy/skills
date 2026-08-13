@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "canonical_serialization": "UTF-8 JSON, sorted keys, compact separators, ensure_ascii=false, trailing newline excluded",
+  "content_hash": "SHA-256 over canonical serialization after removing the top-level content_hash field",
+  "schema_negotiation": "Only schema_version 1 is accepted. Unknown major versions fail closed.",
+  "unknown_fields": "Rejected at every contract object boundary unless the schema explicitly permits them.",
+  "lifecycle_namespace": {
+    "command": "lifecycle",
+    "subcommands": [
+      "plan",
+      "explain",
+      "apply",
+      "status",
+      "verify",
+      "record-cutover",
+      "heartbeat-template"
+    ]
+  },
+  "artifacts": {
+    "approval_envelope": {
+      "schema_ref": "contracts.schema.json#/$defs/approval_envelope",
+      "storage_owner": "external lifecycle state",
+      "source_controlled": false
+    },
+    "collection_manifest": {
+      "schema_ref": "contracts.schema.json#/$defs/collection_manifest",
+      "storage_owner": "explicit source-controlled collection directory",
+      "source_controlled": true
+    },
+    "command_result": {
+      "schema_ref": "contracts.schema.json#/$defs/command_result",
+      "storage_owner": "ephemeral CLI caller or external progress evidence",
+      "source_controlled": false
+    },
+    "discovery_snapshot": {
+      "schema_ref": "contracts.schema.json#/$defs/discovery_snapshot",
+      "storage_owner": "ephemeral caller until an explicit external lifecycle directory is selected",
+      "source_controlled": false
+    },
+    "host_capability_snapshot": {
+      "schema_ref": "contracts.schema.json#/$defs/host_capability_snapshot",
+      "storage_owner": "external lifecycle state",
+      "source_controlled": false
+    },
+    "host_mutation_request": {
+      "schema_ref": "contracts.schema.json#/$defs/host_mutation_request",
+      "storage_owner": "external lifecycle state",
+      "source_controlled": false
+    },
+    "host_mutation_result": {
+      "schema_ref": "contracts.schema.json#/$defs/host_mutation_result",
+      "storage_owner": "external lifecycle state",
+      "source_controlled": false
+    },
+    "lifecycle_command": {
+      "schema_ref": "contracts.schema.json#/$defs/lifecycle_command",
+      "storage_owner": "ephemeral CLI caller",
+      "source_controlled": false
+    },
+    "lifecycle_plan": {
+      "schema_ref": "contracts.schema.json#/$defs/lifecycle_plan",
+      "storage_owner": "explicit external lifecycle or multi-collection coordination directory",
+      "source_controlled": false
+    },
+    "progress_record": {
+      "schema_ref": "contracts.schema.json#/$defs/progress_record",
+      "storage_owner": "external lifecycle state",
+      "source_controlled": false
+    },
+    "readiness_report": {
+      "schema_ref": "contracts.schema.json#/$defs/readiness_report",
+      "storage_owner": "external lifecycle state with optional sanitized export",
+      "source_controlled": false
+    },
+    "semantic_drift_report": {
+      "schema_ref": "contracts.schema.json#/$defs/semantic_drift_report",
+      "storage_owner": "external lifecycle state with optional sanitized export",
+      "source_controlled": false
+    }
+  }
+}

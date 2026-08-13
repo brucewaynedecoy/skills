@@ -32,7 +32,7 @@ This is the living register for confirmed product drift, unresolved decisions, a
 
 | Status | Decision | Follow-Up |
 | --- | --- | --- |
-| Open | Capability behavior is fixed; exact command grouping, names, and schema versions remain an implementation decision. | Resolve during backlog refinement before public CLI implementation. |
+| Closed | Use the additive grouped namespace `lifecycle plan|explain|apply|status|verify|record-cutover|heartbeat-template` with schema version 1 command and result artifacts. Phase 1 reserves the grammar without changing the existing parser. | Implement the reserved namespace against the frozen contracts in the authorized implementation phase. |
 
 **Question**: Should lifecycle operations use a grouped command such as `lifecycle plan|explain|apply|status|verify|record-cutover`, a set of top-level commands, or another equally coherent surface?
 
@@ -42,11 +42,13 @@ This is the living register for confirmed product drift, unresolved decisions, a
 
 **To close**: Record the command grammar and versioned JSON schemas, including stale-plan, no-op, conflict, and partial-progress results.
 
+**Resolution**: `automation-dispatcher/references/guided-lifecycle-contract.md` records the grammar, while `automation_dispatcher.contracts.v1` packages the catalog and JSON schemas. `automation_dispatcher.lifecycle_contracts` enforces schema version, canonical hashes, stale plans, and fail-closed host results.
+
 ### Q-002 Manifest location and multi-collection coordination
 
 | Status | Decision | Follow-Up |
 | --- | --- | --- |
-| Open | Require explicit paths outside prohibited runtime and install roots; do not introduce a hidden home-directory authority. | Select deterministic discovery and coordination rules during artifact implementation design. |
+| Closed | Resolve exact manifests by explicit caller path, then verified heartbeat binding, then registry binding. Reject ambiguity, relative paths without an explicit repository root, cwd guessing, and implicit home-directory authority. | Implement durable heartbeat and registry bindings only in a host-capable authorized phase. |
 
 **Question**: How should the skill locate portable collection manifests and a multi-collection lifecycle plan after task restart without relying on task titles, chat memory, or an implicit home directory?
 
@@ -56,11 +58,13 @@ This is the living register for confirmed product drift, unresolved decisions, a
 
 **To close**: Validate the locator precedence, missing-manifest behavior, path restrictions, and multi-collection resume contract.
 
+**Resolution**: The v1 locator returns exactly one manifest from the first non-empty precedence tier. Each manifest retains its collection identity; one lifecycle plan may coordinate many collections through explicit paths and per-collection boundaries without merging their authority.
+
 ### Q-003 Supported Codex host capabilities and identity evidence
 
 | Status | Decision | Follow-Up |
 | --- | --- | --- |
-| Open | Host integration must use supported task and automation tools and persist observed results; unsupported capabilities fail closed. | Verify the target Codex runtime before host-adapter acceptance. |
+| Confirming | The v1 adapter contract and approval fence are defined, but host acceptance is explicitly blocked in this environment because no callable Codex task/automation list, read, mutation, message, or readback schemas are exposed. Official product documentation is not treated as proof of a callable tool. | In the target host, capture a capability snapshot and contract tests for every required adapter operation before any live mutation or Phase 3 acceptance. |
 
 **Question**: Which live task and automation fields, mutation operations, stable identifiers, message identifiers, and identity assurances are available to the skill in each supported Codex host?
 
@@ -69,6 +73,8 @@ This is the living register for confirmed product drift, unresolved decisions, a
 **Recommendation**: Define a narrow adapter contract around verified capabilities and make missing assurance a reviewable blocker rather than an inferred value.
 
 **To close**: Produce host capability tests and evidence for every discovery, mutation, reconciliation, and identity field required by `05`.
+
+**Blocking evidence**: The Phase 1 environment exposed no Codex task or automation tools. The contract therefore records every required operation as unavailable and fails closed; it does not infer identities, mutate through UI automation, or substitute the CLI as a host scheduler.
 
 ## Rebuild Risks
 

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "artifact_type": "host_mutation_result",
+  "operation_id": "operation-1",
+  "request_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+  "target": {"kind": "automation", "id": "automation-1"},
+  "status": "completed",
+  "attempted_action": "update",
+  "observed_before": {"revision": "revision-1"},
+  "observed_after": null,
+  "evidence": [],
+  "external_message_id": null,
+  "content_hash": "0000000000000000000000000000000000000000000000000000000000000000"
+}
