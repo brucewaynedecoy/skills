@@ -47,6 +47,11 @@ from .lifecycle_contracts import (
 )
 from .lifecycle_discovery import build_accepted_plan, discover_host_state, propose_collections
 from .lifecycle_engine import lifecycle_status, plan_step, semantic_drift_report
+from .lifecycle_initialization import (
+    InitializationPaths,
+    initialize_from_plan,
+    shadow_validate_from_plan,
+)
 from .receipts import (
     acknowledge_receipt,
     create_receipt,
@@ -57,6 +62,7 @@ from .registry import (
     dispatcher_configuration_from_row,
     dispatcher_configuration_hash,
     heartbeat_reconciliation,
+    initialize_dispatcher,
     list_workflows,
     normalize_dispatcher_configuration,
     register_workflow,
@@ -304,7 +310,6 @@ def _workflow_attention(
 
 def _cmd_init(args: argparse.Namespace) -> dict[str, Any]:
     path = _database_path(args)
-    now = _utc_now()
     requirements = _json_value(args.required_identity, default={
         "task_id": {"required": True, "minimum_assurance": "verified_config"},
         "working_directory": {"required": True, "minimum_assurance": "verified_config"},
@@ -320,159 +325,28 @@ def _cmd_init(args: argparse.Namespace) -> dict[str, Any]:
     if not isinstance(catch_up, Mapping):
         raise CliError("catch-up policy must be a JSON object")
     schedule = _json_value(args.schedule, default={})
-    config = normalize_dispatcher_configuration(
-        {
-            "dispatcher_id": args.dispatcher_id,
-            "name": args.name,
-            "description": args.description,
-            "timezone": args.timezone,
-            "schedule": schedule,
-            "max_lateness_seconds": args.max_lateness_seconds,
-            "catch_up": catch_up,
-            "heartbeat_schedule": heartbeat_schedule,
-            "enabled": True,
-        }
+    return initialize_dispatcher(
+        path,
+        dispatcher_id=args.dispatcher_id,
+        name=args.name,
+        description=args.description,
+        schedule=schedule,
+        timezone=args.timezone,
+        max_lateness_seconds=args.max_lateness_seconds,
+        catch_up=catch_up,
+        heartbeat_schedule=heartbeat_schedule,
+        expected_task_id=args.expected_task_id,
+        expected_working_directory=args.expected_working_directory,
+        actor=args.actor,
+        reason=args.reason,
+        required_identity=requirements,
+        automation_id=args.automation_id,
+        expected_harness=args.expected_harness,
+        expected_host=args.expected_host,
+        skill_version=args.skill_version,
+        source_revision=args.source_revision,
+        receipt_creator=create_receipt,
     )
-    reconciliation = heartbeat_reconciliation(config)
-    config_hash = dispatcher_configuration_hash(config)
-    result = initialize_database(path)
-    conn = connect(path)
-    try:
-        conn.execute("BEGIN IMMEDIATE")
-        existing = conn.execute(
-            "SELECT * FROM dispatchers WHERE dispatcher_id = ?", (args.dispatcher_id,)
-        ).fetchone()
-        if existing:
-            expected_directory = str(
-                Path(args.expected_working_directory).expanduser().resolve(strict=True)
-            )
-            if dispatcher_configuration_from_row(existing) != config:
-                raise CliError(
-                    "existing dispatcher configuration differs; use schedule-revise "
-                    "or initialize a different collection"
-                )
-            if (
-                existing["expected_task_id"] != args.expected_task_id
-                or existing["expected_working_directory"] != expected_directory
-            ):
-                raise CliError("existing dispatcher route differs; use route-revise")
-            conn.rollback()
-            return {
-                **result,
-                "dispatcher_id": args.dispatcher_id,
-                "status": "already_initialized",
-                "configuration": config,
-                "heartbeat_reconciliation": reconciliation,
-            }
-        working_directory = str(Path(args.expected_working_directory).expanduser().resolve(strict=True))
-        conn.execute(
-            """
-            INSERT INTO dispatchers (
-                dispatcher_id, name, description, current_revision, schedule_json,
-                automation_id, expected_task_id,
-                expected_working_directory, expected_harness, expected_host,
-                default_reporting_task_id, heartbeat_schedule_json, timezone,
-                max_lateness_seconds, catch_up_policy, max_lookback_seconds, enabled,
-                installed_skill_version, source_revision, created_at, updated_at
-            ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
-            """,
-            (
-                config["dispatcher_id"], config["name"], config["description"],
-                json.dumps(config["schedule"], sort_keys=True, separators=(",", ":")),
-                args.automation_id, args.expected_task_id, working_directory, args.expected_harness,
-                args.expected_host, args.expected_task_id,
-                json.dumps(config["heartbeat_schedule"], sort_keys=True, separators=(",", ":")),
-                config["timezone"], config["max_lateness_seconds"],
-                config["catch_up"]["policy"], config["catch_up"]["max_lookback_seconds"],
-                args.skill_version or __version__, args.source_revision, now, now,
-            ),
-        )
-        conn.execute(
-            """
-            INSERT INTO dispatcher_revisions (
-                dispatcher_id, revision, normalized_config_json, config_hash,
-                actor, reason, effective_at, created_at
-            ) VALUES (?, 1, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                config["dispatcher_id"],
-                json.dumps(config, sort_keys=True, separators=(",", ":"), ensure_ascii=False),
-                config_hash,
-                args.actor,
-                args.reason,
-                now,
-                now,
-            ),
-        )
-        conn.execute(
-            """
-            INSERT INTO dispatcher_routes (
-                route_id, dispatcher_id, revision, destination_task_id,
-                expected_working_directory, expected_harness, expected_host,
-                required_identity_json, effective_at, actor, reason, created_at
-            ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                str(uuid.uuid4()), args.dispatcher_id, args.expected_task_id,
-                working_directory, args.expected_harness, args.expected_host,
-                json.dumps(requirements, sort_keys=True, separators=(",", ":")),
-                now, args.actor, args.reason, now,
-            ),
-        )
-        event = append_event(
-            conn,
-            args.dispatcher_id,
-            "dispatcher_initialized",
-            {
-                "task_id": args.expected_task_id,
-                "collection_name": config["name"],
-                "dispatcher_revision": 1,
-                "schedule": config["schedule"],
-                "route_revision": 1,
-                "heartbeat_schedule_verified": bool(heartbeat_schedule.get("verified", False)),
-                "heartbeat_reconciliation": reconciliation,
-            },
-            actor=args.actor,
-        )
-        content = (
-            "### Dispatcher initialized\n"
-            f"- Dispatcher: `{args.dispatcher_id}`\n"
-            f"- Collection: `{config['name']}`\n"
-            f"- Schedule revision: `1`\n"
-            f"- Audit: `{event['event_id']}/{event['event_hash'][:12]}`"
-        )
-        receipt = create_receipt(
-            conn,
-            dispatcher_id=args.dispatcher_id,
-            destination_task_id=args.expected_task_id,
-            content=content,
-        )
-        append_event(
-            conn,
-            args.dispatcher_id,
-            "receipt_pending",
-            {
-                "receipt_id": receipt["receipt_id"],
-                "content_hash": receipt["content_hash"],
-                "action": "dispatcher_initialized",
-            },
-            actor=args.actor,
-        )
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
-    return {
-        **result,
-        "dispatcher_id": args.dispatcher_id,
-        "status": "initialized",
-        "configuration": config,
-        "heartbeat_reconciliation": reconciliation,
-        "event": event,
-        "receipt": receipt,
-    }
 
 
 def _cmd_status(args: argparse.Namespace) -> dict[str, Any]:
@@ -1127,6 +1001,7 @@ def _lifecycle_result(
     warnings: Sequence[str] = (),
     next_action: Mapping[str, Any] | None = None,
     error: Mapping[str, Any] | None = None,
+    database_path: str | None = None,
 ) -> dict[str, Any]:
     value = seal_artifact(
         {
@@ -1138,7 +1013,7 @@ def _lifecycle_result(
                 "cli_version": __version__,
                 **dict(identity or {}),
             },
-            "database_path": None,
+            "database_path": database_path,
             "source_revision": _lifecycle_source_revision(),
             "event": None,
             "warnings": list(warnings),
@@ -1212,6 +1087,35 @@ def _read_discovery_input(args: argparse.Namespace) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         raise LifecycleContractError(
             "invalid_discovery_input", "discovery input root must be an object"
+        )
+    return value
+
+
+def _required_lifecycle_apply(args: argparse.Namespace, *names: str) -> None:
+    missing = [f"--{name.replace('_', '-')}" for name in names if not getattr(args, name, None)]
+    if missing:
+        raise LifecycleContractError(
+            "initialization_input_required",
+            "non-dry-run lifecycle apply requires explicit fenced inputs",
+            missing=missing,
+        )
+
+
+def _source_occurrences(args: argparse.Namespace) -> list[Mapping[str, Any]]:
+    path = validate_artifact_path(
+        args.source_occurrences,
+        storage_owner="source_controlled",
+        explicit_root=args.repository_root,
+    )
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise LifecycleContractError(
+            "invalid_source_occurrences", f"cannot read source occurrences: {exc}"
+        ) from exc
+    if not isinstance(value, list) or not all(isinstance(item, Mapping) for item in value):
+        raise LifecycleContractError(
+            "invalid_source_occurrences", "source occurrences must be a JSON array of objects"
         )
     return value
 
@@ -1445,44 +1349,123 @@ def _cmd_lifecycle(args: argparse.Namespace) -> dict[str, Any]:
                 ),
             )
         if command == "apply":
-            if not args.dry_run:
+            if args.dry_run:
+                step = plan_step(
+                    plan,
+                    stage=args.stage,
+                    action=args.action,
+                    collection_id=args.collection_id,
+                    progress=progress,
+                )
+                if step.writes:
+                    dry_run = {
+                        **step.as_dict(),
+                        "writes_prevented": list(step.writes),
+                        "host_requests_prevented": list(step.host_requests),
+                        "mutation_count": 0,
+                    }
+                else:
+                    dry_run = {**step.as_dict(), "mutation_count": 0}
+                if step.step_id in {item["step_id"] for item in progress if item["status"] == "completed"}:
+                    result_status = "no_op"
+                elif step.blockers:
+                    result_status = "blocked"
+                else:
+                    result_status = "completed"
+                return _lifecycle_result(
+                    command,
+                    result_status,
+                    identity={
+                        "plan_id": plan["plan_id"],
+                        "command_request_hash": request["content_hash"],
+                        "plan_hash": plan["content_hash"],
+                        "dry_run": True,
+                        "step_plan": dry_run,
+                    },
+                    next_action=step.next_action,
+                )
+            if args.stage not in {"initialize", "shadow_validate"}:
                 raise LifecycleContractError(
                     "dry_run_required",
-                    "Phase 2 lifecycle apply is planning-only and requires --dry-run",
+                    "non-dry-run lifecycle apply is available only for initialize and shadow_validate",
                 )
-            step = plan_step(
-                plan,
-                stage=args.stage,
-                action=args.action,
-                collection_id=args.collection_id,
-                progress=progress,
+            expected_action = {
+                "initialize": "apply",
+                "shadow_validate": "evaluate",
+            }[args.stage]
+            if args.action != expected_action:
+                raise LifecycleContractError(
+                    "invalid_lifecycle_action",
+                    "non-dry-run lifecycle apply requires the exact stage/action pair",
+                    stage=args.stage,
+                    expected_action=expected_action,
+                    observed_action=args.action,
+                )
+            _required_lifecycle_apply(
+                args,
+                "collection_id", "expected_plan_hash", "expected_source_state_hash",
+                "current_source_observation", "database_path", "source_directory",
+                "manifest_path", "heartbeat_template_path", "backup_path", "progress_output",
+                "repository_root", "state_root", "source_root",
             )
-            if step.writes:
-                dry_run = {
-                    **step.as_dict(),
-                    "writes_prevented": list(step.writes),
-                    "host_requests_prevented": list(step.host_requests),
-                    "mutation_count": 0,
+            current_source = _lifecycle_load(
+                args, args.current_source_observation, "discovery_snapshot"
+            ).as_dict()
+            paths = InitializationPaths(
+                database=Path(args.database_path),
+                source_directory=Path(args.source_directory),
+                manifest=Path(args.manifest_path),
+                heartbeat_template=Path(args.heartbeat_template_path),
+                backup=Path(args.backup_path),
+                progress=Path(args.progress_output),
+                readiness=Path(args.readiness_path) if args.readiness_path else None,
+            )
+            common = {
+                "collection_id": args.collection_id,
+                "expected_plan_hash": args.expected_plan_hash,
+                "expected_source_state_hash": args.expected_source_state_hash,
+                "actor": args.actor,
+                "paths": paths,
+                "repository_root": args.repository_root,
+                "state_root": args.state_root,
+                "source_root": args.source_root,
+                "installed_roots": tuple(args.installed_root or ()),
+            }
+            if args.stage == "initialize":
+                applied = initialize_from_plan(
+                    plan,
+                    current_source,
+                    reason=args.reason,
+                    source_revision=_lifecycle_source_revision(),
+                    **common,
+                )
+                next_action = {
+                    "type": "shadow_validate",
+                    "collection_id": args.collection_id,
+                    "existing_sources_authoritative": True,
                 }
             else:
-                dry_run = {**step.as_dict(), "mutation_count": 0}
-            if step.step_id in {item["step_id"] for item in progress if item["status"] == "completed"}:
-                result_status = "no_op"
-            elif step.blockers:
-                result_status = "blocked"
-            else:
-                result_status = "completed"
+                _required_lifecycle_apply(
+                    args, "source_occurrences", "window_start", "window_end", "readiness_path"
+                )
+                applied = shadow_validate_from_plan(
+                    plan,
+                    current_source,
+                    _source_occurrences(args),
+                    window_start=args.window_start,
+                    window_end=args.window_end,
+                    **common,
+                )
+                next_action = {
+                    "type": "resolve_blockers" if applied["status"] == "blocked" else "request_cutover_approval",
+                    "existing_sources_authoritative": True,
+                }
             return _lifecycle_result(
                 command,
-                result_status,
-                identity={
-                    "plan_id": plan["plan_id"],
-                    "command_request_hash": request["content_hash"],
-                    "plan_hash": plan["content_hash"],
-                    "dry_run": True,
-                    "step_plan": dry_run,
-                },
-                next_action=step.next_action,
+                applied["status"],
+                identity={**applied, "command_request_hash": request["content_hash"], "dry_run": False},
+                next_action=next_action,
+                database_path=applied["database_path"],
             )
         raise LifecycleContractError(
             "unsupported_lifecycle_command", f"unsupported lifecycle command: {command}"
@@ -1491,6 +1474,14 @@ def _cmd_lifecycle(args: argparse.Namespace) -> dict[str, Any]:
         status = {
             "optimistic_concurrency_conflict": "conflict",
             "source_snapshot_drift": "conflict",
+            "plan_hash_mismatch": "conflict",
+            "source_conflict": "conflict",
+            "registry_conflict": "conflict",
+            "route_conflict": "conflict",
+            "backup_stale": "conflict",
+            "plan_expired": "blocked",
+            "unapproved_source_path": "blocked",
+            "unapproved_state_path": "blocked",
             "unsupported_future": "blocked",
             "migration_required": "blocked",
             "forbidden_artifact_path": "blocked",
@@ -1714,6 +1705,19 @@ def build_parser() -> argparse.ArgumentParser:
             command.add_argument("--action", required=True)
             command.add_argument("--collection-id")
             command.add_argument("--dry-run", action="store_true")
+            command.add_argument("--expected-plan-hash")
+            command.add_argument("--expected-source-state-hash")
+            command.add_argument("--current-source-observation")
+            command.add_argument("--database-path")
+            command.add_argument("--source-directory")
+            command.add_argument("--manifest-path")
+            command.add_argument("--heartbeat-template-path")
+            command.add_argument("--backup-path")
+            command.add_argument("--progress-output")
+            command.add_argument("--readiness-path")
+            command.add_argument("--source-occurrences")
+            command.add_argument("--window-start")
+            command.add_argument("--window-end")
         command.set_defaults(handler=_cmd_lifecycle)
     return parser
 

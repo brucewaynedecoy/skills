@@ -531,6 +531,83 @@ def _progress_event(
     return None
 
 
+def verify_progress_audit_binding(
+    connection: sqlite3.Connection,
+    progress: Mapping[str, Any],
+    *,
+    dispatcher_id: str,
+) -> dict[str, Any]:
+    """Verify a sealed progress record against its exact immutable audit event."""
+
+    try:
+        record = validate_artifact("progress_record", progress)
+    except LifecycleContractError as exc:
+        return {
+            "valid": False,
+            "errors": [{"error": exc.code, "message": str(exc)}],
+            "event_id": progress.get("event_id"),
+            "event_hash": None,
+            "progress_hash": None,
+        }
+    errors: list[dict[str, Any]] = []
+    if record["dispatcher_id"] != dispatcher_id:
+        errors.append({
+            "error": "dispatcher_mismatch",
+            "expected": dispatcher_id,
+            "observed": record["dispatcher_id"],
+        })
+    event_id = record["event_id"]
+    if event_id is None:
+        errors.append({"error": "event_id_missing"})
+        row = None
+    else:
+        row = connection.execute(
+            "SELECT event_id,event_hash,workflow_id,actor,payload_json "
+            "FROM audit_events WHERE dispatcher_id = ? "
+            "AND event_type = 'lifecycle_transition' AND event_id = ?",
+            (dispatcher_id, event_id),
+        ).fetchone()
+        if row is None:
+            errors.append({"error": "audit_event_missing", "event_id": event_id})
+    audit_material = dict(record)
+    audit_material["event_id"] = None
+    progress_hash = seal_artifact(audit_material)["content_hash"]
+    event_hash = None
+    if row is not None:
+        event_hash = row["event_hash"]
+        try:
+            payload = json.loads(row["payload_json"])
+        except (TypeError, json.JSONDecodeError):
+            payload = None
+            errors.append({"error": "audit_payload_invalid"})
+        expected_payload = {
+            "plan_id": record["plan_id"],
+            "plan_hash": record["plan_hash"],
+            "operation_id": record["operation_id"],
+            "step_id": record["step_id"],
+            "stage": record["stage"],
+            "status": record["status"],
+            "progress_hash": progress_hash,
+        }
+        if payload != expected_payload:
+            errors.append({
+                "error": "audit_payload_mismatch",
+                "expected": expected_payload,
+                "observed": payload,
+            })
+        if row["workflow_id"] != record["workflow_id"]:
+            errors.append({"error": "audit_workflow_mismatch"})
+        if row["actor"] != record["actor"]:
+            errors.append({"error": "audit_actor_mismatch"})
+    return {
+        "valid": not errors,
+        "errors": errors,
+        "event_id": event_id,
+        "event_hash": event_hash,
+        "progress_hash": progress_hash,
+    }
+
+
 def assert_registry_progress_current(
     connection: sqlite3.Connection,
     dispatcher_id: str,

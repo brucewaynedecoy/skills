@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import json
 import hashlib
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .audit import append_event
+from . import __version__
+from .database import connect, initialize_database
 from .definitions import (
     DefinitionError,
     load_definition,
@@ -438,6 +441,180 @@ def revise_dispatcher_schedule(
     return {
         **result,
         "status": "schedule_revised",
+        "event": event,
+        "receipt": receipt,
+    }
+
+
+def initialize_dispatcher(
+    database_path: str | Path,
+    *,
+    dispatcher_id: str,
+    name: str,
+    description: str,
+    schedule: Any,
+    timezone: str,
+    max_lateness_seconds: int,
+    catch_up: Mapping[str, Any],
+    heartbeat_schedule: Mapping[str, Any],
+    expected_task_id: str,
+    expected_working_directory: str | Path,
+    actor: str,
+    reason: str,
+    required_identity: Mapping[str, Any],
+    automation_id: str | None = None,
+    expected_harness: str | None = None,
+    expected_host: str | None = None,
+    skill_version: str | None = None,
+    source_revision: str | None = None,
+    timestamp: str | None = None,
+    route_id: str | None = None,
+    receipt_creator: Callable[..., dict[str, Any]] = create_receipt,
+) -> dict[str, Any]:
+    """Initialize or verify one collection through the canonical registry path."""
+
+    config = normalize_dispatcher_configuration(
+        {
+            "dispatcher_id": dispatcher_id,
+            "name": name,
+            "description": description,
+            "timezone": timezone,
+            "schedule": schedule,
+            "max_lateness_seconds": max_lateness_seconds,
+            "catch_up": catch_up,
+            "heartbeat_schedule": heartbeat_schedule,
+            "enabled": True,
+        }
+    )
+    reconciliation = heartbeat_reconciliation(config)
+    config_hash = dispatcher_configuration_hash(config)
+    initialized = initialize_database(database_path)
+    working_directory = str(
+        Path(expected_working_directory).expanduser().resolve(strict=True)
+    )
+    now = timestamp or _now()
+    conn = connect(database_path)
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        existing = conn.execute(
+            "SELECT * FROM dispatchers WHERE dispatcher_id = ?", (dispatcher_id,)
+        ).fetchone()
+        if existing:
+            if dispatcher_configuration_from_row(existing) != config:
+                raise RegistryError(
+                    "existing dispatcher configuration differs; use schedule-revise "
+                    "or initialize a different collection"
+                )
+            if (
+                existing["expected_task_id"] != expected_task_id
+                or existing["expected_working_directory"] != working_directory
+            ):
+                raise RegistryError("existing dispatcher route differs; use route-revise")
+            if source_revision is not None and existing["source_revision"] != source_revision:
+                raise RegistryError("existing dispatcher source revision differs")
+            conn.rollback()
+            return {
+                **initialized,
+                "dispatcher_id": dispatcher_id,
+                "status": "already_initialized",
+                "configuration": config,
+                "heartbeat_reconciliation": reconciliation,
+            }
+        conn.execute(
+            """
+            INSERT INTO dispatchers (
+                dispatcher_id, name, description, current_revision, schedule_json,
+                automation_id, expected_task_id,
+                expected_working_directory, expected_harness, expected_host,
+                default_reporting_task_id, heartbeat_schedule_json, timezone,
+                max_lateness_seconds, catch_up_policy, max_lookback_seconds, enabled,
+                installed_skill_version, source_revision, created_at, updated_at
+            ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+            """,
+            (
+                config["dispatcher_id"], config["name"], config["description"],
+                _json(config["schedule"]), automation_id, expected_task_id,
+                working_directory, expected_harness, expected_host, expected_task_id,
+                _json(config["heartbeat_schedule"]), config["timezone"],
+                config["max_lateness_seconds"], config["catch_up"]["policy"],
+                config["catch_up"]["max_lookback_seconds"], skill_version or __version__,
+                source_revision, now, now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO dispatcher_revisions (
+                dispatcher_id, revision, normalized_config_json, config_hash,
+                actor, reason, effective_at, created_at
+            ) VALUES (?, 1, ?, ?, ?, ?, ?, ?)
+            """,
+            (dispatcher_id, _json(config), config_hash, actor, reason, now, now),
+        )
+        conn.execute(
+            """
+            INSERT INTO dispatcher_routes (
+                route_id, dispatcher_id, revision, destination_task_id,
+                expected_working_directory, expected_harness, expected_host,
+                required_identity_json, effective_at, actor, reason, created_at
+            ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                route_id or str(uuid.uuid4()), dispatcher_id, expected_task_id,
+                working_directory, expected_harness, expected_host,
+                _json(required_identity), now, actor, reason, now,
+            ),
+        )
+        event = append_event(
+            conn,
+            dispatcher_id,
+            "dispatcher_initialized",
+            {
+                "task_id": expected_task_id,
+                "collection_name": config["name"],
+                "dispatcher_revision": 1,
+                "schedule": config["schedule"],
+                "route_revision": 1,
+                "heartbeat_schedule_verified": bool(heartbeat_schedule.get("verified", False)),
+                "heartbeat_reconciliation": reconciliation,
+            },
+            actor=actor,
+        )
+        content = (
+            "### Dispatcher initialized\n"
+            f"- Dispatcher: `{dispatcher_id}`\n"
+            f"- Collection: `{config['name']}`\n"
+            "- Schedule revision: `1`\n"
+            f"- Audit: `{event['event_id']}/{event['event_hash'][:12]}`"
+        )
+        receipt = receipt_creator(
+            conn,
+            dispatcher_id=dispatcher_id,
+            destination_task_id=expected_task_id,
+            content=content,
+        )
+        append_event(
+            conn,
+            dispatcher_id,
+            "receipt_pending",
+            {
+                "receipt_id": receipt["receipt_id"],
+                "content_hash": receipt["content_hash"],
+                "action": "dispatcher_initialized",
+            },
+            actor=actor,
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+    return {
+        **initialized,
+        "dispatcher_id": dispatcher_id,
+        "status": "initialized",
+        "configuration": config,
+        "heartbeat_reconciliation": reconciliation,
         "event": event,
         "receipt": receipt,
     }

@@ -31,9 +31,19 @@ automation-dispatcher lifecycle record-cutover
 automation-dispatcher lifecycle heartbeat-template
 ```
 
-Phase 1 froze this grammar and its JSON contracts. Phase 2 exposes the read-only `plan`, `explain`, `status`, and `verify` foundation plus planning-only `apply --dry-run`; `record-cutover` and `heartbeat-template` remain reserved for later phases. Existing low-level commands remain unchanged.
+Phase 1 froze this grammar and its JSON contracts. Phase 2 exposes the read-only `plan`, `explain`, `status`, and `verify` foundation plus planning-only `apply --dry-run`. Phase 4 adds non-dry-run apply only for the exact `initialize/apply` and `shadow_validate/evaluate` stage/action pairs. `record-cutover` and the standalone `heartbeat-template` command remain reserved for later phases. Existing low-level commands remain unchanged.
 
 Every lifecycle command request uses the `lifecycle_command` schema. Every machine-readable result uses `command_result` and carries schema version, command, status, collection/plan identity, resolved database path, source revision, event evidence, warnings, next action, and structured error. Unknown fields and unknown schema versions fail closed.
+
+## Initialization and shadow validation
+
+Non-dry-run initialization requires the accepted lifecycle plan and current validated discovery snapshot, exact expected plan and source-state hashes, the accepting actor, the collection ID, and explicit repository, source, installed, state, source-directory, manifest, database, heartbeat-template, backup, and progress paths. All mutable state paths must be exact accepted-plan entries under the explicit state root and outside source/install roots. Generated source paths must be exact accepted-plan paths or deterministic implementation-owned definition, documented-procedure, authority, or heartbeat paths under the explicit repository/source directory. Symlinks, traversal, broad roots, and differing existing bytes fail closed.
+
+Initialization delegates database creation to the same public registry service as low-level `init`, then uses the canonical definition preparation and registration APIs. Before writing a manifest it verifies the current dispatcher revision, complete normalized configuration and hash, route, heartbeat reconciliation, workflow hashes and definition paths, and a nonempty valid audit chain. The manifest binds the plan, collection revision, database locator, workflow and source-file hashes, heartbeat template, and CLI/source revisions. The pre-cutover backup must restore successfully, match the initialized dispatcher/config/workflow projection, contain nonempty audit provenance matching a live-chain prefix, and have its SHA-256 recorded as explicit restore-verified evidence in audit-bound lifecycle progress. Exact replay is a no-op; crash recovery resumes without duplicate revisions, registrations, receipts, backups, or progress events.
+
+Shadow validation requires an explicit bounded source-occurrence array, timezone-aware half-open window, and readiness output. Each occurrence has exactly `source_id`, `scheduled_for`, `intended_local`, `effective_local`, `timezone`, and `adjustment`; canonical identity includes DST gap/fold metadata. The evaluator compares occurrences through the scheduling engine and verifies source freshness, full dispatcher and route projections, definition bytes and paths, heartbeat reconciliation, integrity and foreign keys, audit chain, backup provenance, and backup-SHA progress binding. It does not call due, claim, run, complete, fail, recovery, receipt posting, or any host mutation, and it must leave registry bytes, relevant row counts, and audit tip unchanged.
+
+Readiness is `blocked` for any semantic difference, stale evidence, missing projection, backup/audit failure, or incomplete host capability coverage. Q-003 remains an explicit blocker until callable task and automation read/write schemas are proven. Existing scheduled sources remain authoritative, and neither initialization nor readiness authorizes cutover.
 
 ## Artifact catalog
 

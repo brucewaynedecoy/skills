@@ -38,7 +38,7 @@ For repository development, run `uv run automation-dispatcher`. For live heartbe
 
 Always provide the explicit database path required by the CLI. Refuse a database inside the source checkout, an installed skill directory, or an installed CLI environment. Runtime state belongs in the verified collection task's durable working directory.
 
-For guided-lifecycle artifact validation, explanation, resumable status, or semantic verification, use the grouped `lifecycle plan`, `lifecycle explain`, `lifecycle status`, and `lifecycle verify` commands with explicit state/source roots. Phase 2 `lifecycle apply` is planning-only and must include `--dry-run`; it performs no registry, artifact, host, task, automation, or receipt mutation. Treat `record-cutover` and `heartbeat-template` as reserved until their later implementation phases.
+For guided-lifecycle artifact validation, explanation, resumable status, or semantic verification, use the grouped `lifecycle plan`, `lifecycle explain`, `lifecycle status`, and `lifecycle verify` commands with explicit state/source roots. `lifecycle apply --dry-run` retains its Phase 2 planning-only behavior and performs no registry, artifact, host, task, automation, or receipt mutation. Phase 4 non-dry-run apply is admitted only for the exact `initialize/apply` and `shadow_validate/evaluate` stage/action pairs described below. Treat `record-cutover` and the standalone `heartbeat-template` command as reserved until their later implementation phases.
 
 ## Discover and propose collections
 
@@ -51,6 +51,14 @@ Review the returned proposal as a decision package in both canonical JSON and bo
 Discussion and proposal review are not acceptance. Add `--accept-proposal`, an `--expires-at` later than the actual acceptance time, exactly one topology alternative (`--selected-alternative keep-separate` or `accept-compatible-groups`), and one `--include-paused-id` or `--exclude-paused-id` for each paused candidate only after the user accepts the exact proposal. The topology choice materially determines plan collections. An accepted plan is bound to the discovery snapshot and proposal hashes; state and source paths are normalized within explicit state/repository roots and fenced from source, installed, broad, traversal, and symlink targets. Writing it requires an explicit external `--output` path. This stage never initializes a registry, changes a task or automation, or authorizes cutover.
 
 Resolve relative script procedure references from the registered definition file's directory. Require every resolved script to remain inside an explicit approved root; never rely on the heartbeat's current working directory.
+
+## Initialize and shadow-validate an accepted plan
+
+Use non-dry-run `lifecycle apply` only when initialization at the exact plan-approved paths is explicitly authorized. Supply the accepted plan, the current validated discovery snapshot, the caller's exact plan and source-state hashes, the accepting actor, one collection ID, and every source/state path explicitly. Initialization requires `--stage initialize --action apply`; it generates only deterministic plan-owned definition and procedure files, initializes through the canonical registry service, dry-runs and registers definitions through the low-level registry API, verifies the full projection, writes the manifest and pinned heartbeat template, creates and restore-verifies the backup, and persists audit-bound progress. Differing existing files, partial registry projections, stale observations, expired approval, actor/hash mismatch, or unapproved paths stop before later artifacts are sealed.
+
+Run `--stage shadow_validate --action evaluate` only after successful initialization. Also provide an explicit bounded source-occurrence JSON file, timezone-aware `--window-start` and `--window-end`, and `--readiness-path`. Each source occurrence must contain exactly `source_id`, `scheduled_for`, `intended_local`, `effective_local`, `timezone`, and `adjustment`; comparison preserves DST gap/fold identity. Shadow validation uses scheduling, routing, registry, integrity, audit, definition, heartbeat, backup-provenance, and progress evidence without claiming or running work, posting receipts, or changing database bytes. Existing scheduled sources remain authoritative.
+
+Q-003 remains fail-closed until callable Codex task and automation schemas are proven in the active runtime. A blocked readiness report is evidence for reconciliation, not cutover authorization. Do not create or change a heartbeat, task, or automation from the generated template without a separate explicit cutover approval.
 
 ## Dispatch safely
 
