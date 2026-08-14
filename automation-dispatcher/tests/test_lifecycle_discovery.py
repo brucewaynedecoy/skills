@@ -678,8 +678,9 @@ def test_resume_after_rediscovery_is_no_op_or_requires_reproposal_on_change() ->
 
 
 def test_lifecycle_plan_cli_proposes_then_writes_only_explicitly_accepted_plan(
-    tmp_path: Path, capsys
+    tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.setattr("automation_dispatcher.cli._utc_now", lambda: NOW)
     repository = tmp_path / "fixture-repository"
     state = tmp_path / "external-state"
     repository.mkdir()
@@ -738,8 +739,9 @@ def test_lifecycle_plan_cli_proposes_then_writes_only_explicitly_accepted_plan(
 
 
 def test_lifecycle_human_output_renders_split_risk_and_paused_inclusion_decision(
-    tmp_path: Path, capsys
+    tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.setattr("automation_dispatcher.cli._utc_now", lambda: NOW)
     repository = tmp_path / "repository"
     state = tmp_path / "state"
     repository.mkdir()
