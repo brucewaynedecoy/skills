@@ -36,9 +36,16 @@ from .definitions import normalize_definition
 from .lifecycle_artifacts import (
     ARTIFACT_MODELS,
     LifecycleArtifact,
+    atomic_write_artifact,
     load_artifact,
 )
-from .lifecycle_contracts import LifecycleContractError, seal_artifact, validate_artifact
+from .lifecycle_contracts import (
+    LifecycleContractError,
+    seal_artifact,
+    validate_artifact,
+    validate_artifact_path,
+)
+from .lifecycle_discovery import build_accepted_plan, discover_host_state, propose_collections
 from .lifecycle_engine import lifecycle_status, plan_step, semantic_drift_report
 from .receipts import (
     acknowledge_receipt,
@@ -1167,7 +1174,11 @@ def _lifecycle_command_request(
     args: argparse.Namespace, plan: Mapping[str, Any] | None = None
 ) -> dict[str, Any]:
     command = args.lifecycle_command
-    input_path = getattr(args, "input", None) or getattr(args, "plan", None)
+    input_path = (
+        getattr(args, "input", None)
+        or getattr(args, "host_observations", None)
+        or getattr(args, "plan", None)
+    )
     request = seal_artifact(
         {
             "schema_version": 1,
@@ -1186,12 +1197,180 @@ def _lifecycle_command_request(
     return validate_artifact("lifecycle_command", request)
 
 
+def _read_discovery_input(args: argparse.Namespace) -> Mapping[str, Any]:
+    path = validate_artifact_path(
+        args.host_observations,
+        storage_owner="source_controlled",
+        explicit_root=args.repository_root,
+    )
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise LifecycleContractError(
+            "invalid_discovery_input", f"cannot read discovery input: {exc}"
+        ) from exc
+    if not isinstance(value, Mapping):
+        raise LifecycleContractError(
+            "invalid_discovery_input", "discovery input root must be an object"
+        )
+    return value
+
+
 def _cmd_lifecycle(args: argparse.Namespace) -> dict[str, Any]:
     command = args.lifecycle_command
     request: dict[str, Any] | None = None
     try:
         request = _lifecycle_command_request(args)
+        if command == "plan" and args.host_observations:
+            if args.input or args.artifact_type:
+                raise LifecycleContractError(
+                    "ambiguous_plan_input",
+                    "host discovery and artifact validation inputs are mutually exclusive",
+                )
+            if args.output and not args.accept_proposal:
+                raise LifecycleContractError(
+                    "proposal_acceptance_required",
+                    "--output requires --accept-proposal",
+                )
+            observations = _read_discovery_input(args)
+            capabilities = (
+                _lifecycle_load(
+                    args, args.host_capabilities, "host_capability_snapshot"
+                ).as_dict()
+                if args.host_capabilities
+                else None
+            )
+            filters = _json_value(args.filter_json, default={})
+            if not isinstance(filters, Mapping):
+                raise LifecycleContractError(
+                    "invalid_discovery_bound", "--filter-json must be an object"
+                )
+            discovery = discover_host_state(
+                observations,
+                capability_snapshot=capabilities,
+                actor=args.actor,
+                selected_ids=args.select_id or (),
+                filters=filters,
+                cursor=args.cursor,
+                page_size=args.page_size,
+            )
+            snapshot = discovery.snapshot.as_dict()
+            proposal = propose_collections(snapshot)
+            identity: dict[str, Any] = {
+                "command_request_hash": request["content_hash"],
+                "read_only": True,
+                "mutation_count": 0,
+                "discovery_snapshot": snapshot,
+                "proposal": proposal,
+                "pagination": {
+                    "next_cursor": discovery.next_cursor,
+                    "total_candidates": discovery.total_candidates,
+                },
+            }
+            output_path = None
+            accepted_unresolved: list[str] | None = None
+            if args.accept_proposal:
+                if not args.expires_at:
+                    raise LifecycleContractError(
+                        "plan_expiry_required",
+                        "--expires-at is required with --accept-proposal",
+                    )
+                include_paused = list(args.include_paused_id or ())
+                exclude_paused = list(args.exclude_paused_id or ())
+                duplicate_paused = sorted(
+                    {
+                        source_id
+                        for values in (include_paused, exclude_paused)
+                        for source_id in values
+                        if values.count(source_id) > 1
+                    }
+                )
+                conflicting_paused = sorted(set(include_paused) & set(exclude_paused))
+                if duplicate_paused or conflicting_paused:
+                    raise LifecycleContractError(
+                        "ambiguous_paused_source_decision",
+                        "each paused source requires exactly one include or exclude flag",
+                        duplicates=duplicate_paused,
+                        conflicts=conflicting_paused,
+                    )
+                accepted_at = _utc_now()
+                plan_artifact = build_accepted_plan(
+                    snapshot,
+                    proposal,
+                    actor=args.actor,
+                    accepted=True,
+                    expires_at=args.expires_at,
+                    accepted_at=accepted_at,
+                    selected_alternatives=args.selected_alternative
+                    or ("accept-compatible-groups",),
+                    paused_source_decisions={
+                        **{source_id: True for source_id in include_paused},
+                        **{source_id: False for source_id in exclude_paused},
+                    },
+                    state_paths=args.plan_state_path or (),
+                    source_paths=args.plan_source_path or (),
+                    state_root=args.state_root,
+                    repository_root=args.repository_root,
+                    source_root=args.source_root,
+                    installed_roots=tuple(args.installed_root or ()),
+                )
+                identity["lifecycle_plan"] = plan_artifact.as_dict()
+                accepted_unresolved = list(
+                    plan_artifact.data["unresolved_decisions"]
+                )
+                if args.output:
+                    validated_output = validate_artifact_path(
+                        args.output,
+                        storage_owner="external_state",
+                        explicit_root=args.state_root,
+                        source_root=args.source_root,
+                        installed_roots=tuple(args.installed_root or ()),
+                    )
+                    if validated_output.exists():
+                        raise LifecycleContractError(
+                            "immutable_plan_output_exists",
+                            "accepted lifecycle plan output already exists",
+                            path=str(validated_output),
+                        )
+                    output_path = atomic_write_artifact(
+                        validated_output,
+                        plan_artifact,
+                        storage_owner="external_state",
+                        explicit_root=args.state_root,
+                        source_root=args.source_root,
+                        installed_roots=tuple(args.installed_root or ()),
+                    )
+                    identity["output_path"] = str(output_path)
+                    identity["mutation_count"] = 1
+            decision_items = (
+                accepted_unresolved
+                if accepted_unresolved is not None
+                else list(proposal["unresolved_decisions"])
+            )
+            blocked = bool(decision_items)
+            return _lifecycle_result(
+                command,
+                "blocked" if blocked else "completed",
+                identity=identity,
+                warnings=proposal["warnings"],
+                next_action={
+                    "type": (
+                        "resolve_questions"
+                        if blocked
+                        else "initialize_review"
+                        if args.accept_proposal
+                        else "accept_proposal"
+                    ),
+                    "items": decision_items,
+                    "output_path": str(output_path) if output_path else None,
+                },
+            )
         if command == "plan":
+            if not args.input or not args.artifact_type:
+                raise LifecycleContractError(
+                    "plan_input_required",
+                    "provide --input with --artifact-type or --host-observations",
+                )
             artifact = _lifecycle_load(args, args.input, args.artifact_type)
             return _lifecycle_result(
                 command,
@@ -1323,7 +1502,11 @@ def _cmd_lifecycle(args: argparse.Namespace) -> dict[str, Any]:
             status,
             identity={
                 "plan_id": getattr(args, "plan_id", None),
-                "input_path": getattr(args, "input", None) or getattr(args, "plan", None),
+                "input_path": (
+                    getattr(args, "input", None)
+                    or getattr(args, "host_observations", None)
+                    or getattr(args, "plan", None)
+                ),
                 "command_request_hash": request.get("content_hash") if request else None,
                 "exit_code": 2 if status == "failed" else 1,
             },
@@ -1493,8 +1676,22 @@ def build_parser() -> argparse.ArgumentParser:
     lifecycle_sub = lifecycle.add_subparsers(dest="lifecycle_command", required=True)
 
     lifecycle_plan = lifecycle_sub.add_parser("plan")
-    lifecycle_plan.add_argument("--artifact-type", required=True, choices=tuple(ARTIFACT_MODELS))
-    lifecycle_plan.add_argument("--input", required=True)
+    lifecycle_plan.add_argument("--artifact-type", choices=tuple(ARTIFACT_MODELS))
+    lifecycle_plan.add_argument("--input")
+    lifecycle_plan.add_argument("--host-observations")
+    lifecycle_plan.add_argument("--host-capabilities")
+    lifecycle_plan.add_argument("--select-id", action="append")
+    lifecycle_plan.add_argument("--filter-json")
+    lifecycle_plan.add_argument("--cursor", type=int, default=0)
+    lifecycle_plan.add_argument("--page-size", type=int)
+    lifecycle_plan.add_argument("--accept-proposal", action="store_true")
+    lifecycle_plan.add_argument("--expires-at")
+    lifecycle_plan.add_argument("--selected-alternative", action="append")
+    lifecycle_plan.add_argument("--include-paused-id", action="append")
+    lifecycle_plan.add_argument("--exclude-paused-id", action="append")
+    lifecycle_plan.add_argument("--plan-state-path", action="append")
+    lifecycle_plan.add_argument("--plan-source-path", action="append")
+    lifecycle_plan.add_argument("--output")
     lifecycle_plan.add_argument("--actor", required=True)
     lifecycle_plan.add_argument("--reason", required=True)
     _add_lifecycle_path_arguments(lifecycle_plan)
@@ -1529,13 +1726,108 @@ def _human(result: Any) -> str:
             next_action = result.get("next_action")
             error = result.get("error")
             parts = [str(status)]
+            proposal_lines: list[str] = []
             if identity.get("plan_id"):
                 parts.append(f"plan_id={identity['plan_id']}")
+            proposal = identity.get("proposal")
+            if isinstance(proposal, Mapping):
+                parts.extend(
+                    (
+                        f"collections={len(proposal.get('collections', []))}",
+                        f"workflows={len(proposal.get('workflow_mappings', []))}",
+                        f"exclusions={len(proposal.get('exclusions', []))}",
+                        f"unresolved={len(proposal.get('unresolved_decisions', []))}",
+                    )
+                )
+                collections = list(proposal.get("collections", []))
+                for collection in collections[:5]:
+                    schedule = collection.get("schedule")
+                    expression = (
+                        schedule.get("expression")
+                        if isinstance(schedule, Mapping)
+                        else schedule
+                    )
+                    sources = collection.get("cutover_candidate", {}).get(
+                        "source_ids", []
+                    )
+                    source_text = ",".join(str(item) for item in sources[:8])
+                    if len(sources) > 8:
+                        source_text += f",...(+{len(sources) - 8})"
+                    proposal_lines.append(
+                        "collection="
+                        f"{collection.get('dispatcher_id')} schedule={expression} "
+                        f"timezone={collection.get('timezone')} "
+                        f"target={collection.get('target_task_id')} "
+                        f"sources={source_text} "
+                        f"rationale={collection.get('grouping_rationale')}"
+                    )
+                if len(collections) > 5:
+                    proposal_lines.append(f"collections_more={len(collections) - 5}")
+                mappings = list(proposal.get("workflow_mappings", []))
+                for mapping in mappings[:8]:
+                    proposal_lines.append(
+                        "mapping="
+                        f"{mapping.get('source_id')}->"
+                        f"{mapping.get('dispatcher_id')}/{mapping.get('workflow_id')}"
+                    )
+                if len(mappings) > 8:
+                    proposal_lines.append(f"mappings_more={len(mappings) - 8}")
+                split_decisions = [
+                    item
+                    for item in proposal.get("grouping_decisions", [])
+                    if isinstance(item, Mapping) and item.get("decision") == "split"
+                ]
+                for decision in split_decisions[:5]:
+                    proposal_lines.append(
+                        "split="
+                        f"{','.join(str(item) for item in decision.get('collection_ids', []))} "
+                        f"fields={','.join(str(item) for item in decision.get('differing_fields', []))} "
+                        f"rationale={decision.get('rationale')}"
+                    )
+                if len(split_decisions) > 5:
+                    proposal_lines.append(f"splits_more={len(split_decisions) - 5}")
+                inclusion_decisions = list(proposal.get("inclusion_decisions", []))
+                for decision in inclusion_decisions[:5]:
+                    proposal_lines.append(
+                        "inclusion="
+                        f"{decision.get('source_id')} choices="
+                        f"{','.join(str(item) for item in decision.get('choices', []))} "
+                        f"reason={decision.get('reason')}"
+                    )
+                if len(inclusion_decisions) > 5:
+                    proposal_lines.append(
+                        f"inclusions_more={len(inclusion_decisions) - 5}"
+                    )
+                risks = list(proposal.get("risks", []))
+                proposal_lines.append(
+                    "risks="
+                    + (
+                        " | ".join(
+                            f"{item.get('severity')}:{item.get('code')}:{item.get('summary')}"
+                            [:320]
+                            for item in risks[:5]
+                        )
+                        if risks
+                        else "none"
+                    )
+                )
+                if len(risks) > 5:
+                    proposal_lines.append(f"risks_more={len(risks) - 5}")
+                unresolved = list(proposal.get("unresolved_decisions", []))
+                proposal_lines.append(
+                    "questions="
+                    + (
+                        " | ".join(str(item)[:240] for item in unresolved[:5])
+                        or "none"
+                    )
+                )
+                if len(unresolved) > 5:
+                    proposal_lines.append(f"questions_more={len(unresolved) - 5}")
             if isinstance(next_action, Mapping) and next_action.get("type"):
                 parts.append(f"next_action={next_action['type']}")
             if isinstance(error, Mapping) and error.get("code"):
                 parts.append(f"blocker={error['code']}")
-            return " ".join(parts)
+            return "\n".join((" ".join(parts), *proposal_lines))
         identifiers = [
             f"{key}={result[key]}"
             for key in ("dispatcher_id", "workflow_id", "run_id", "receipt_id")
