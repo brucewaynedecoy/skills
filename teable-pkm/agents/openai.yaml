@@ -1,0 +1,4 @@
+interface:
+  display_name: "Teable PKM"
+  short_description: "Operate Tyler’s Teable knowledge base"
+  default_prompt: "Use $teable-pkm to find, organize, or update records in Tyler’s Teable PKM base."
