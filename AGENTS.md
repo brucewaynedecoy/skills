@@ -9,3 +9,7 @@
 This repository contains a collection of custom agent skills, and so any documentation created for this project (i.e., under `docs/`) should be **skill-specific** and not generic.  This important differentiating boundary should also be considered when applying or interpreting Make Docs contracts; for example, a new design for a skill "foo" should incorporate the skill's specific name in the file name, and should contain identifying details that will map the design to that skill's directory/implementation.
 
 Since Make Docs explicitly states that PRD sets are authoritative and non-versionable, agents MUST interpret each document in the set (other than the fixed documents) as a PRD for a single skill (i.e., each document pertains to a single skill).
+
+## Important
+
+Never use semantic lines in Markdown files.
