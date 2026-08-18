@@ -61,6 +61,41 @@ Do not identify a record by title alone when records share that title. Use
 organization, project, owner, email, or another contextual field to resolve
 the target.
 
+## Build the payload in a file
+
+Do not write a `--records` payload as inline single-quoted shell JSON when it
+contains prose. Extracted text routinely contains an apostrophe, which closes
+the shell quote and silently mangles what gets written. The command still
+succeeds, so nothing warns you.
+
+Write the payload to a file, then pass it:
+
+```bash
+python3 - <<'PY' > payload.json
+import json, sys
+json.dump([[
+  "Prepare security review",
+  "Task",
+  "Planned",
+  "High",
+  "2026-08-24T17:00:00-05:00",
+  "Prepare the materials for Tyler's security review."
+]], sys.stdout)
+PY
+
+teable record create \
+  --base-id "$BASE_ID" \
+  --table-id "tblsMY7UWZyRI4oA0FD" \
+  --header '["Title","Type","Status","Priority","Due At","Summary"]' \
+  --records "$(cat payload.json)"
+```
+
+Generating the JSON with a serializer also escapes quotes, newlines, and
+non-ASCII characters correctly. Hand-written payloads do not.
+
+Inline JSON is acceptable only for a short payload you can see contains no
+apostrophe, quote, or newline.
+
 ## Create and update records
 
 Use one bulk command for multiple records in the same table.
@@ -70,16 +105,7 @@ teable record create \
   --base-id "$BASE_ID" \
   --table-id "tblsMY7UWZyRI4oA0FD" \
   --header '["Title","Type","Status","Priority","Due At","Summary"]' \
-  --records '[
-    [
-      "Prepare security review",
-      "Task",
-      "Planned",
-      "High",
-      "2026-08-24T17:00:00-05:00",
-      "Prepare the materials required for the security review."
-    ]
-  ]'
+  --records "$(cat payload.json)"
 ```
 
 Update by stable record ID:
@@ -106,6 +132,20 @@ Apply these update rules:
 - Use `true` or `null` for a checkbox.
 - Use ISO 8601 dates with an explicit offset when time matters.
 - Match choice names exactly. Choice names are case-sensitive.
+- Read the target record immediately before updating it. Never trust a record
+  ID you are carrying from earlier in the session. Writing the right content to
+  the wrong record produces two wrong records and no error.
+
+## Check every write
+
+`success: true` does not mean the write landed as intended.
+
+- Read the `warnings` array on every create and update. A link value that the
+  CLI could not resolve is reported there and nowhere else, for example:
+  `"Organization" (link): 2 value(s) not written`.
+- Read back the first affected record whenever the write set links, dates,
+  choices, or collaborators.
+- Confirm the record you read back is the one you meant to change.
 
 ## Write links
 

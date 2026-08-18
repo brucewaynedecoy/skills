@@ -54,6 +54,40 @@ Always write `External ID` on the meeting Activity, even when the source has
 no obvious identifier. Use the most stable value available, such as a file
 identifier or a normalized filename. Without it the next agent cannot dedupe.
 
+### Also check for adjacent meetings
+
+The identifier check only catches the same source captured twice. It does not
+catch the larger risk: a nearby meeting whose records already cover this one.
+
+People meet repeatedly about the same thing, often on the same day. One
+meeting's agenda is frequently the next meeting's outcome. Capturing both
+without checking produces duplicate action items that nobody notices, because
+each one looks correct on its own.
+
+Before creating any Activity, search for meetings near this one in time and
+subject:
+
+```bash
+teable record get \
+  --base-id "$BASE_ID" \
+  --table-id "tblsMY7UWZyRI4oA0FD" \
+  --view-id "viwWDMu6RROIo3dBhj5" \
+  --take 100
+```
+
+Read any meeting Activity from the same day, or from the same Project within a
+few days, and read its child Activities before writing your own. Then:
+
+- If an existing task already covers a commitment from this transcript, do not
+  create a second one. Cite the existing record in your `Details` or `Outcome`
+  instead, and update that task if this transcript changes its status.
+- Create a task only for a commitment no adjacent meeting already carries.
+- Link the two meeting Activities with a Bookmark relationship, using a
+  directional disposition such as `immediately precedes`.
+
+An agenda item that a later meeting already answered is not an open task. It
+is context for the meeting that answered it.
+
 ## Verify the source is complete
 
 Paginated exports and streamed captures often hold only the first page.
@@ -102,10 +136,15 @@ Set at least:
 - `Organization`, `Team`, and `Project` context
 - `Summary`, `Details`, and `Outcome`
 
-Use party fields by meaning:
+Use party fields by meaning. They carry the humans, never your agent identity:
 
-- `Actors`: who convened or ran the meeting.
+- `Actors`: the person who convened or ran the meeting.
 - `Participants or Audience`: everyone who attended.
+
+Your agent identity does not belong on a captured meeting or on any task
+extracted from it, because the agent did not attend or perform any of it. The
+agent's involvement is recorded by `Notes.Author` on the Notes it wrote. See
+[identity-and-groups.md](identity-and-groups.md).
 
 Attach every action item as a child Activity through `Parent Activity`. Attach
 both Notes through the Activity's `Notes` link.
@@ -161,8 +200,17 @@ For each one, capture:
 - `Status = Waiting` when it is blocked, and name the blocker in `Details`
 - `Details`: any answer already given in the meeting, and any qualifier
 
-Do not invent a `Due At` from a vague phrase such as "soon" or "as soon as
-possible". Leave the field empty and quote the phrase in `Details`.
+Set `Due At` by how precise the spoken commitment was:
+
+| Source says | Do this |
+|---|---|
+| A date, or "Monday", "next Friday", "end of month" | Resolve it against the meeting date and write `Due At`. State the resolution and the spoken phrase in `Details` |
+| "soon", "as soon as possible", "this week sometime" | Leave `Due At` empty. Quote the phrase in `Details` |
+| Nothing | Leave `Due At` empty |
+
+When you resolve a named weekday, use the next occurrence after the meeting
+date, and confirm the weekday of the meeting itself first. Use a placeholder
+time and say in `Details` that only the date is from the source.
 
 Include items a participant flagged as their own side's internal problem. They
 are still commitments, and they still belong on the timeline.

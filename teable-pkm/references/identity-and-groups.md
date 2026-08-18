@@ -81,8 +81,19 @@ not the one active when you got round to writing it:
 
 - `Memories.Agent` and `Memories.Recorded By`: the identity that produced the
   knowledge.
-- Note `Author` and Activity `Actors`: the Persons record of the identity that
-  did the work.
+- `Notes.Author`: the identity that wrote the note.
+- `Actors`, on an Activity that records the agent's own work, such as a `Log`.
+
+Attribute by who performed the thing the record describes, not by who typed
+the record. The agent wrote the note, so the agent is its `Author`. The agent
+did not attend the meeting, so the agent is never a party on an Activity that
+describes what other people did.
+
+Never put an agent identity in `For`, `Assigned To`, `Actors`, or
+`Participants or Audience` on an Activity that describes human work, including
+any meeting or task captured from a source. Those fields carry the humans. The
+agent's involvement is already recorded by `Notes.Author` and by the memories
+it wrote.
 
 When a session used more than one identity, report each identity and what it
 did. Do not log an Activity for the switch itself.
@@ -180,6 +191,19 @@ organization. Use these exact choices:
 
 Use an Affiliation when a person's title, department, relationship type,
 primary affiliation, or effective dates matter.
+
+Never guess an employer. When a source names a person but not who they work
+for:
+
+- Create the Persons record with no `Primary Organization`.
+- Create no Affiliation.
+- State in `Summary` that the employer is not given in the source, along with
+  any hint the source did provide.
+
+An unlinked person is honest. A person linked to the wrong organization is a
+fact you invented, and it will be read as verified later. The same applies to
+an unverified surname or spelling taken from a machine transcript: record it in
+`Summary`, and do not put it in `Name`.
 
 ## Teams and team roles
 

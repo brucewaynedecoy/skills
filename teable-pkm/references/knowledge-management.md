@@ -38,8 +38,30 @@ Use these exact `Confidentiality` choices:
 - `Shared`
 - `Public`
 
-A Note should normally include `Title`, `Type`, `Status`, `Body`, and `Author`
-when known.
+A Note should normally include `Title`, `Type`, `Status`, `Body`, `Author`, and
+`Owner`.
+
+`Author` and `Owner` are different and both are required in practice:
+
+- `Author` is who wrote the note. When you wrote it, that is your agent
+  identity's Persons record. Set it on every Note you create.
+- `Owner` is whose knowledge it is, normally Tyler.
+
+Check the `Notes Missing Author` view after any Note write.
+
+Set `Confidentiality` from the most restrictive thing in the body, not from the
+meeting's title:
+
+| Body contains | Use |
+|---|---|
+| Candid criticism of a named person, personnel matters, compensation | `Private` |
+| Anything involving an external party, client, or partner | `Restricted` |
+| Internal-only work with nothing sensitive about a person | `Internal` |
+| Material already circulated beyond the organization | `Shared` |
+| Material intended for publication | `Public` |
+
+A verbatim transcript takes the same level as its meeting notes. When two
+levels could apply, take the more restrictive one.
 
 Use direct links from Notes to Organizations, Teams, Projects, and Activities
 for common context. Use `Supersedes` when a Note replaces an earlier version.
@@ -187,9 +209,21 @@ Do not capture:
 - a reminder or a follow-up; those are Activities
 - a restatement of this skill or of the `System` guidance
 
-Prefer one precise Memory over several overlapping ones. When a new Memory
-contradicts an existing one, use `Supersedes` and set the old record to
-`Superseded` rather than writing a second competing claim.
+Prefer one precise Memory over several overlapping ones. Choose between three
+actions when new knowledge touches an existing Memory:
+
+| The existing Memory is | Do this |
+|---|---|
+| Wrong, or its claim has changed | Create a new Memory, set `Supersedes`, set the old one to `Superseded` |
+| Correct but incomplete | Edit it in place and append the new detail. Do not supersede |
+| Correct and complete, and this is a different claim | Write a separate Memory |
+
+Superseding says the old claim stopped being true. Editing says it was always
+true and you now know more. Do not supersede a record merely because you
+touched it.
+
+When a Memory's condition has simply ended, set `Status = Expired` and record
+in `Content` what resolved it. Do not delete it.
 
 Relate each Memory to the records it concerns with a Bookmark relationship,
 because Memories carry no direct domain links.
