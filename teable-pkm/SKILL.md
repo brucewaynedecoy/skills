@@ -40,20 +40,60 @@ disagree with this skill, follow the live base and report the difference.
 - Delete only when the user explicitly requests deletion and the link impact
   is known.
 - Do not update agent connection timestamps during read-only work.
+- Resolving your own agent identity is a read and is always permitted.
+  Creating an agent identity is a write and requires user approval.
+
+## Resolve your agent identity first
+
+Do this once at the start of every session, before any other base work. It is
+a read, so it is permitted even for a read-only request.
+
+1. Read the active Agent records.
+2. Keep only the records whose `Harnesses` include the harness you are running
+   in. `Harnesses` is an eligibility gate, not a discriminator.
+3. Among those, adopt the record whose `Role` fits your intent for this
+   session. `Role` is the discriminator.
+4. If exactly one record matches, adopt it and continue.
+5. If no record matches, continue without an identity. Do not create one
+   silently. Ask the user once, and create it only if the user approves.
+6. If more than one record matches, ask the user which identity to use.
+
+Re-resolve when the session's objective shifts to a different `Role`, such as
+extraction becoming curation. Attribute every record to the identity that was
+active when that work happened, and report each identity you used.
+
+```bash
+teable record get \
+  --base-id "$BASE_ID" \
+  --table-id "tbljYF8abSc3WN0g08o" \
+  --take 100
+```
+
+An adopted identity gives you the `Agent` link that `Memories` requires and
+the `Persons` record used for `Recorded By`, note authorship, and Activity
+parties. Without an identity you may still read and write domain records, but
+you must not write `Memories`. Say so in your final report.
+
+Read [references/identity-and-groups.md](references/identity-and-groups.md)
+for the match rule, the re-resolution rule, the approval wording, and the
+memory-capture rules.
 
 ## Follow the core workflow
 
-1. Determine whether the request is read-only or permits a write.
-2. Read the active operating guide for an unfamiliar task.
-3. Choose the table from the meaning of the information.
-4. Read the `System` row and the reference files for each involved table.
-5. Search for existing records before creating new records.
-6. Resolve linked records before writing links.
-7. Write only the requested scope.
-8. Read back the first affected record when Teable resolves links,
+1. Resolve your agent identity.
+2. Determine whether the request is read-only or permits a write.
+3. Read the active operating guide for an unfamiliar task.
+4. Choose the table from the meaning of the information.
+5. Read the `System` row and the reference files for each involved table.
+6. Search for existing records before creating new records.
+7. Resolve linked records before writing links.
+8. Write only the requested scope.
+9. Read back the first affected record when Teable resolves links,
    collaborators, choices, or dates.
-9. Inspect the applicable validation view.
-10. Report the result and all unresolved issues.
+10. Capture durable `Memories` under your identity when the session produced
+    knowledge that should shape later sessions.
+11. Inspect the applicable validation view.
+12. Report the result and all unresolved issues.
 
 Read the active operating guide:
 
@@ -114,6 +154,14 @@ typed Activities and Notes.
 - Read [references/knowledge-management.md](references/knowledge-management.md)
   for Notes, Bookmarks, Memories, Tags, research, transcripts, instructions,
   or knowledge relationships.
+- Read [references/capture-transcript.md](references/capture-transcript.md)
+  before capturing a meeting recording, transcript, or call into the base.
+  Read it in addition to the reference for each table you will write.
+
+A reference named `capture-<source>.md` covers ingesting one kind of external
+source into the base. Read the matching capture reference alongside the table
+references, never instead of them. Name any new capture reference the same
+way, so the set stays grouped.
 - Read [references/system-maintenance.md](references/system-maintenance.md)
   for validation, archival, deletion, schema maintenance, or completion
   reports after a mutation.
@@ -134,15 +182,24 @@ references.
 9. Update `System` when the user requests a schema or operating-contract
    change.
 10. Report created or updated record IDs after a mutation.
+11. Write a `Memory` only under a resolved agent identity.
+12. Reuse an existing agent identity instead of creating a near-duplicate.
+13. Prefer a harness-agnostic identity; add a harness to an existing record
+    rather than forking a parallel one.
+14. Search the source identifier before capturing any external source, so a
+    re-run updates records instead of duplicating them.
 
 ## Finish with evidence
 
 After a permitted write, report:
 
+- every agent identity used, what each one did, and any re-resolution, or that
+  no identity was resolved
 - tables affected
 - records created or updated
 - stable record IDs
 - significant links established
+- memories captured, or why none were captured
 - validation issues or unresolved ambiguity
 - requested operations that were not performed
 

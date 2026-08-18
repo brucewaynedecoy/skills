@@ -164,6 +164,36 @@ record and set its status to `Superseded`.
 Review `Working Memory`, `Long-Term Memory`, `Review Due`, and `Expiring Soon`
 when loading agent context.
 
+### Capture memories during a session
+
+A Memory requires a resolved agent identity. Set `Agent` to your Agent record
+and `Recorded By` to its paired Persons record. Without an identity, write no
+Memories and say so in the final report. See
+[identity-and-groups.md](identity-and-groups.md).
+
+Capture a Memory when the session produced something that should change how a
+later session behaves:
+
+- a correction the user made to your model of their world
+- a decision the user reached, and the reason behind it
+- a durable fact that the records themselves do not state
+- a convention, preference, or format rule the user asked you to keep
+- a heuristic that saved real effort and would save it again
+
+Do not capture:
+
+- anything already stated by a domain record you just wrote
+- the fact that you performed a task
+- a reminder or a follow-up; those are Activities
+- a restatement of this skill or of the `System` guidance
+
+Prefer one precise Memory over several overlapping ones. When a new Memory
+contradicts an existing one, use `Supersedes` and set the old record to
+`Superseded` rather than writing a second competing claim.
+
+Relate each Memory to the records it concerns with a Bookmark relationship,
+because Memories carry no direct domain links.
+
 ## Tags
 
 Use Tags for reusable subjects that retrieve records across tables.
